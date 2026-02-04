@@ -1,245 +1,270 @@
-# LoRa-Meshtastic-OSM-notes-bot
+# OSM Mesh Notes Gateway
 
-Gateway MVP para convertir mensajes Meshtastic en notas de OpenStreetMap (OSM). Diseñado para Raspberry Pi 3 con dispositivo Meshtastic Heltec V3 conectado por USB.
+**Offline field reports via LoRa mesh → OpenStreetMap Notes**
 
-## Descripción
+---
 
-Este gateway permite a usuarios en campo enviar reportes de mapeo usando dispositivos Meshtastic (como T-Echo) que se convierten automáticamente en notas de OSM. El sistema incluye:
+## ¿Qué es?
 
-- **Recepción de mensajes** desde dispositivos Meshtastic vía USB serial
-- **Cache de posiciones GPS** para validación de ubicación
-- **Procesamiento de comandos** mediante hashtags (#osmnote, #osmhelp, etc.)
-- **Deduplicación inteligente** para evitar reportes duplicados
-- **Store-and-forward** con SQLite para garantizar entrega
-- **Envío a OSM Notes API** con rate limiting
-- **Notificaciones por DM** con anti-spam
+El **OSM Mesh Notes Gateway** es un sistema que permite a personas en terreno (sin conexión a Internet) enviar reportes de mapeo usando dispositivos LoRa mesh (Meshtastic) que se convierten automáticamente en notas de OpenStreetMap.
 
-## Requisitos
+Cuando un usuario en campo envía un mensaje con el comando `#osmnote` desde su dispositivo Meshtastic (como un T-Echo), el gateway lo recibe por radio LoRa, valida su ubicación GPS, y lo convierte en una nota pública de OSM. Si no hay Internet disponible, el reporte se guarda en una cola local y se envía automáticamente cuando la conexión se restaura.
 
-- Raspberry Pi 3 (o superior) con Raspberry Pi OS
-- Dispositivo Meshtastic (Heltec V3) conectado por USB
-- Conexión a Internet (para envío a OSM)
+Este sistema está diseñado para funcionar de forma autónoma en una Raspberry Pi con un dispositivo Meshtastic conectado por USB, operando 24/7 sin intervención manual.
+
+---
+
+## ¿Por qué existe?
+
+Este proyecto nace de la necesidad de permitir reportes de mapeo en situaciones donde:
+
+- **No hay Internet disponible**: Zonas remotas, áreas afectadas por desastres naturales, o lugares donde la infraestructura de telecomunicaciones está caída o es inexistente.
+- **Se requiere mapeo colaborativo**: Comunidades que necesitan documentar cambios en el territorio, daños por desastres, o mejoras necesarias en infraestructura.
+- **Conectividad intermitente**: El gateway funciona como un "puente" entre la red LoRa mesh local (que no requiere Internet) y OpenStreetMap (que sí lo requiere), almacenando reportes localmente cuando no hay conexión.
+
+El sistema prioriza **robustez** y **simplicidad de despliegue**, permitiendo que comunidades locales puedan desplegar su propio gateway con hardware accesible y software de código abierto.
+
+---
+
+## ¿Cómo funciona?
+
+El flujo básico es el siguiente:
+
+1. **Usuario en campo**: Envía un reporte desde su dispositivo Meshtastic (T-Echo) usando el comando `#osmnote <mensaje>`. El dispositivo debe tener GPS activo y estar al aire libre para obtener ubicación.
+
+2. **Red LoRa mesh**: El mensaje viaja por radio LoRa hasta llegar al gateway, sin necesidad de Internet.
+
+3. **Gateway**: 
+   - Recibe el mensaje por USB desde el dispositivo Meshtastic conectado
+   - Valida que haya GPS reciente (últimos 60 segundos)
+   - Verifica que no sea un duplicado
+   - Guarda el reporte en una base de datos local (SQLite)
+
+4. **Envío a OSM**:
+   - Si hay Internet: Envía inmediatamente a la API de OSM Notes
+   - Si no hay Internet: Guarda en cola y envía automáticamente cuando se restaura la conexión
+
+5. **Confirmación**: El usuario recibe una confirmación por mensaje directo (DM) con el ID de la nota creada o el ID de cola si quedó pendiente.
+
+```
+┌─────────────┐      LoRa      ┌──────────┐      USB      ┌─────────────┐
+│   T-Echo    │ ──────────────> │ Heltec   │ ────────────> │ Raspberry   │
+│  (Campo)    │    (Radio)     │   V3     │   (Serial)    │     Pi      │
+└─────────────┘                └──────────┘               └─────────────┘
+                                                                   │
+                                                                   │ Internet
+                                                                   ▼
+                                                            ┌─────────────┐
+                                                            │ OSM Notes   │
+                                                            │    API      │
+                                                            └─────────────┘
+```
+
+---
+
+## Quick Start
+
+### Requisitos
+
+- **Raspberry Pi 3** (o superior) con Raspberry Pi OS
+- **Dispositivo Meshtastic** (Heltec V3) conectado por USB
+- Conexión a Internet (para envío a OSM, puede ser intermitente)
 - Python 3.8+
 
-## Instalación
-
-### Instalación automática (recomendada)
+### Instalación rápida
 
 ```bash
+# Clonar repositorio
 git clone https://github.com/OSM-Notes/osm-mesh-notes-gateway.git
 cd osm-mesh-notes-gateway
+
+# Instalar (requiere sudo)
 sudo bash scripts/install_pi.sh
 ```
 
-El script de instalación:
-1. Instala dependencias del sistema
-2. Crea entorno virtual en `/opt/lora-osmnotes`
-3. Instala dependencias de Python
-4. Crea directorio de datos en `/var/lib/lora-osmnotes`
-5. Configura servicio systemd
-6. Agrega usuario al grupo `dialout` para acceso serial
+El script de instalación configura todo automáticamente:
+- Instala dependencias del sistema
+- Crea entorno virtual Python
+- Configura servicio systemd
+- Agrega usuario al grupo `dialout` para acceso serial
 
-### Instalación manual
+### Configuración inicial
 
-1. **Instalar dependencias del sistema:**
+1. **Detectar puerto serial**:
 ```bash
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-venv python3-dev gcc git sqlite3
-```
-
-2. **Crear entorno virtual:**
-```bash
-python3 -m venv /opt/lora-osmnotes
-source /opt/lora-osmnotes/bin/activate
-```
-
-3. **Instalar dependencias:**
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
-```
-
-4. **Crear directorio de datos:**
-```bash
-sudo mkdir -p /var/lib/lora-osmnotes
-sudo chown $USER:$USER /var/lib/lora-osmnotes
-```
-
-5. **Configurar variables de entorno:**
-```bash
-cp .env.example /var/lib/lora-osmnotes/.env
-# Editar /var/lib/lora-osmnotes/.env según necesidad
-```
-
-6. **Agregar usuario a dialout:**
-```bash
-sudo usermod -a -G dialout $USER
-# Cerrar sesión y volver a iniciar para aplicar cambios
-```
-
-7. **Instalar servicio systemd:**
-Copiar el contenido de `systemd/lora-osmnotes.service` a `/etc/systemd/system/` y ajustar rutas.
-
-## Configuración
-
-### Variables de entorno
-
-Editar `/var/lib/lora-osmnotes/.env`:
-
-```bash
-# Puerto serial del dispositivo Meshtastic
-SERIAL_PORT=/dev/ttyACM0
-
-# Modo dry-run (no envía DMs ni llama a OSM)
-DRY_RUN=false
-
-# Zona horaria
-TZ=America/Bogota
-
-# Nivel de logging
-LOG_LEVEL=INFO
-
-# Broadcast diario opcional
-DAILY_BROADCAST_ENABLED=false
-```
-
-### Detectar puerto serial
-
-```bash
-# Listar dispositivos seriales
 ls -l /dev/ttyACM* /dev/ttyUSB*
-
-# Verificar permisos
-ls -l /dev/ttyACM0
-
-# Probar conexión (requiere permisos)
-sudo chmod 666 /dev/ttyACM0
 ```
 
-## Uso
+2. **Editar configuración** (`/var/lib/lora-osmnotes/.env`):
+```bash
+SERIAL_PORT=/dev/ttyACM0  # Ajustar según tu dispositivo
+DRY_RUN=false
+TZ=America/Bogota
+```
 
-### Iniciar servicio
-
+3. **Iniciar servicio**:
 ```bash
 sudo systemctl start lora-osmnotes
 sudo systemctl enable lora-osmnotes  # Iniciar al arrancar
 ```
 
-### Ver logs
-
+4. **Verificar funcionamiento**:
 ```bash
-# Ver logs en tiempo real
 sudo journalctl -u lora-osmnotes -f
-
-# Ver últimos 100 líneas
-sudo journalctl -u lora-osmnotes -n 100
-
-# Ver logs desde hoy
-sudo journalctl -u lora-osmnotes --since today
 ```
 
-### Detener servicio
+### Uso básico
 
-```bash
-sudo systemctl stop lora-osmnotes
-```
+Desde la app Meshtastic en tu teléfono (conectado por Bluetooth al T-Echo):
 
-## Comandos disponibles
+- `#osmnote Árbol caído bloquea la calle` - Crea una nota de OSM
+- `#osmhelp` - Muestra ayuda
+- `#osmstatus` - Verifica estado del gateway
+- `#osmlist` - Lista tus notas recientes
+
+---
+
+## Documentación
+
+Para más información, consulta la documentación técnica:
+
+- **[docs/spec.md](docs/spec.md)** - Especificación canónica del MVP (fuente de verdad)
+- **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
+- **[docs/message-format.md](docs/message-format.md)** - Formato de mensajes Meshtastic
+- **[docs/API.md](docs/API.md)** - Referencia de API interna
+- **[docs/SECURITY.md](docs/SECURITY.md)** - Guía de seguridad
+- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Solución de problemas
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
+
+---
+
+## Privacidad y Alcance
+
+### ⚠️ **NO es un sistema de emergencias**
+
+Este sistema **NO debe usarse** para:
+- Emergencias médicas o situaciones que requieran atención inmediata
+- Reportes que requieran respuesta de autoridades
+- Comunicación crítica que dependa de disponibilidad garantizada
+
+### 🔒 **Privacidad**
+
+- **Canal público**: Los mensajes viajan por un canal LoRa público, cualquier nodo en el mismo canal puede leerlos
+- **Datos personales**: NO envíes información personal identificable (nombres, números de teléfono, direcciones específicas)
+- **Notas públicas**: Las notas creadas en OSM son públicas y visibles para cualquiera
+- **Advertencias automáticas**: Todos los mensajes del sistema incluyen advertencias de privacidad
+
+### 📍 **Alcance del sistema**
+
+El gateway procesa **solo** mensajes que contengan comandos específicos (hashtags como `#osmnote`, `#osmhelp`, etc.). Los mensajes de texto libre sin comandos son ignorados y no se responde a ellos.
+
+---
+
+## Comandos Disponibles
 
 Los usuarios pueden enviar comandos desde la app Meshtastic:
 
-### `#osmnote <mensaje>`
-Crea una nota de OSM con el mensaje proporcionado. Requiere GPS reciente (últimos 60 segundos).
+| Comando | Descripción |
+|---------|-------------|
+| `#osmnote <mensaje>` | Crea una nota de OSM. Requiere GPS reciente (≤60s) |
+| `#osmhelp` | Muestra instrucciones de uso |
+| `#osmstatus` | Estado del gateway (activo, Internet, colas) |
+| `#osmcount` | Conteo de notas creadas (hoy + total) |
+| `#osmlist [n]` | Lista últimas `n` notas (default: 5, max: 20) |
+| `#osmqueue` | Tamaño de cola total y del nodo |
 
-Variantes aceptadas: `#osmnote`, `#osm-note`, `#osm_note`
+Variantes aceptadas para `#osmnote`: `#osm-note`, `#osm_note`
 
-### `#osmhelp`
-Muestra instrucciones de uso.
+---
 
-### `#osmstatus`
-Muestra estado del gateway:
-- Gateway activo/inactivo
-- Estado de Internet
-- Tamaño de cola total
-- Tamaño de cola del nodo
+## Créditos
 
-### `#osmcount`
-Muestra conteo de notas creadas:
-- Notas creadas hoy
-- Total de notas
+Este proyecto fue desarrollado como parte del esfuerzo de mapeo colaborativo para comunidades en zonas con conectividad limitada.
 
-### `#osmlist [n]`
-Lista las últimas `n` notas del nodo (default: 5, máximo: 20).
+**Desarrollado por**: OSM-Notes Project Team
 
-### `#osmqueue`
-Muestra tamaño de cola:
-- Cola total
-- Cola del nodo
+**Con el apoyo de**:
+- **AC3** - Apoyo técnico y validación en campo
+- **NASA Lifelines** - Financiamiento y contexto de aplicación en respuesta a desastres
 
-## Validación GPS
+**Autores**: Ver [AUTHORS](AUTHORS) para la lista completa de contribuidores.
+
+---
+
+## Licencia
+
+Este proyecto está licenciado bajo **GPL-3.0**. Ver archivo [LICENSE](LICENSE).
+
+Para información sobre cómo citar este software, ver [CITATION.cff](CITATION.cff).
+
+---
+
+## Contribuciones
+
+Las contribuciones son bienvenidas. Por favor:
+
+1. Fork el proyecto: https://github.com/OSM-Notes/osm-mesh-notes-gateway
+2. Crea una rama para tu feature
+3. Commit tus cambios
+4. Push a la rama
+5. Abre un Pull Request
+
+Ver **[CONTRIBUTING.md](CONTRIBUTING.md)** para más detalles.
+
+---
+
+## Soporte
+
+Para reportar problemas o solicitar features, abre un issue en GitHub:
+https://github.com/OSM-Notes/osm-mesh-notes-gateway/issues
+
+Para problemas comunes, consulta **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
+
+---
+
+## Notas Técnicas
+
+### Validación GPS
 
 El sistema valida la posición GPS antes de crear notas:
-
 - **Sin GPS**: Rechaza si no hay posición en cache
 - **GPS viejo (>60s)**: Rechaza con mensaje de error
 - **GPS aproximado (15-60s)**: Acepta pero marca como "posición aproximada"
 - **GPS reciente (≤15s)**: Acepta normalmente
 
-## Deduplicación
+### Deduplicación
 
 El sistema evita crear notas duplicadas si coinciden:
-- Mismo `node_id`
+- Mismo `node_id` emisor
 - Texto normalizado idéntico
 - Ubicación muy cercana (redondeada a 4 decimales ≈ 11m)
 - Mismo bucket temporal de 120 segundos
 
-## Documentación
+### Store-and-Forward
 
-- **[README.md](README.md)** - Esta guía de inicio rápido
-- **[docs/spec.md](docs/spec.md)** - Especificación canónica del MVP (fuente de verdad)
-- **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
-- **[docs/message-format.md](docs/message-format.md)** - Formato de mensajes Meshtastic
+El sistema usa SQLite para almacenar reportes localmente cuando no hay Internet, garantizando que ningún reporte se pierda. Los reportes pendientes se envían automáticamente cuando se restaura la conexión.
 
-## Estructura del proyecto
+---
+
+## Estructura del Proyecto
 
 ```
 .
-├── src/
-│   └── gateway/
-│       ├── __init__.py
-│       ├── main.py           # Aplicación principal
-│       ├── config.py         # Configuración
-│       ├── database.py       # SQLite database
-│       ├── meshtastic_serial.py  # Comunicación serial
-│       ├── position_cache.py # Cache de posiciones GPS
-│       ├── commands.py       # Procesamiento de comandos
-│       ├── osm_worker.py     # Worker de envío a OSM
-│       └── notifications.py  # Sistema de notificaciones
-├── tests/                    # Tests con pytest
-├── scripts/
-│   └── install_pi.sh        # Script de instalación
-├── systemd/                  # Archivos systemd
-├── requirements.txt         # Dependencias Python
-├── setup.py                 # Setup package
-├── README.md                # Documentación principal
-├── CONTRIBUTING.md          # Guía de contribución
-├── CHANGELOG.md             # Historial de cambios
-├── CITATION.cff             # Información de citación
-├── AUTHORS                   # Autores y contribuidores
-└── docs/                    # Documentación técnica
-    ├── spec.md              # Especificación canónica del MVP
-    ├── architecture.md      # Arquitectura del sistema
-    ├── message-format.md    # Formato de mensajes
-    ├── API.md               # Referencia de API interna
-    ├── SECURITY.md          # Guía de seguridad
-    └── TROUBLESHOOTING.md   # Solución de problemas
+├── src/gateway/          # Código fuente principal
+├── tests/                # Tests con pytest
+├── scripts/              # Scripts de instalación
+├── systemd/              # Archivos systemd
+├── docs/                 # Documentación técnica
+├── README.md             # Este archivo
+├── CONTRIBUTING.md       # Guía de contribución
+├── CHANGELOG.md          # Historial de cambios
+├── CITATION.cff          # Información de citación
+└── AUTHORS               # Autores y contribuidores
 ```
 
-## Testing
+---
 
-Ejecutar tests:
+## Testing
 
 ```bash
 # Instalar dependencias de desarrollo
@@ -251,178 +276,3 @@ pytest
 # Con cobertura
 pytest --cov=gateway --cov-report=html
 ```
-
-## Troubleshooting
-
-### Error: "Failed to determine user credentials"
-
-Si ves este error en los logs, significa que el usuario configurado en el servicio no existe.
-
-**Solución rápida:**
-```bash
-sudo bash scripts/fix_service_user.sh
-```
-
-O manualmente:
-```bash
-# Ver qué usuario existe
-whoami
-
-# Editar el servicio
-sudo systemctl edit --full lora-osmnotes.service
-# Cambiar User=pi por User=tu_usuario
-
-# Recargar y reiniciar
-sudo systemctl daemon-reload
-sudo systemctl restart lora-osmnotes
-```
-
-Ver **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** para guía completa de troubleshooting.
-
-### El servicio no inicia
-
-**Error común: "Failed to determine user credentials"**
-
-Si ves este error, el usuario `pi` no existe en tu sistema. Solución:
-
-```bash
-# Ver qué usuario existe
-whoami
-
-# Editar el servicio
-sudo systemctl edit --full lora-osmnotes.service
-# Cambiar User=pi por User=tu_usuario
-
-# Recargar y reiniciar
-sudo systemctl daemon-reload
-sudo systemctl restart lora-osmnotes
-```
-
-O reinstalar con el script que detecta automáticamente el usuario:
-```bash
-sudo bash scripts/install_pi.sh
-```
-
-**Otros problemas:**
-
-1. Verificar logs:
-```bash
-sudo journalctl -u lora-osmnotes -n 50
-```
-
-2. Verificar permisos del puerto serial:
-```bash
-ls -l /dev/ttyACM0
-sudo chmod 666 /dev/ttyACM0  # Temporal para pruebas
-```
-
-3. Verificar que el usuario esté en grupo `dialout`:
-```bash
-groups
-```
-
-Ver **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** para más detalles.
-
-### No se reciben mensajes
-
-1. Verificar conexión serial:
-```bash
-# Verificar dispositivo
-lsusb | grep -i meshtastic
-
-# Probar conexión directa
-sudo screen /dev/ttyACM0 9600
-```
-
-2. Verificar configuración de puerto en `.env`
-
-3. Verificar logs del gateway:
-```bash
-sudo journalctl -u lora-osmnotes -f
-```
-
-### No se envían notas a OSM
-
-1. Verificar conexión a Internet:
-```bash
-ping -c 3 api.openstreetmap.org
-```
-
-2. Verificar rate limiting (mínimo 3s entre envíos)
-
-3. Verificar logs para errores de API:
-```bash
-sudo journalctl -u lora-osmnotes | grep -i "osm\|error"
-```
-
-### Modo Dry-Run
-
-Para probar sin enviar DMs ni crear notas en OSM:
-
-```bash
-# Editar .env
-echo "DRY_RUN=true" >> /var/lib/lora-osmnotes/.env
-
-# Reiniciar servicio
-sudo systemctl restart lora-osmnotes
-```
-
-## Desarrollo
-
-### Estructura de base de datos
-
-Tabla `notes`:
-- `id`: ID autoincremental
-- `local_queue_id`: ID único de cola (Q-0001, Q-0002, ...)
-- `node_id`: ID del nodo Meshtastic
-- `created_at`: Timestamp de creación
-- `lat`, `lon`: Coordenadas GPS
-- `text_original`: Texto original del mensaje
-- `text_normalized`: Texto normalizado para deduplicación
-- `status`: 'pending' o 'sent'
-- `osm_note_id`: ID de la nota en OSM (nullable)
-- `osm_note_url`: URL de la nota en OSM (nullable)
-- `sent_at`: Timestamp de envío (nullable)
-- `last_error`: Último error (nullable)
-- `notified_sent`: Flag de notificación enviada (0/1)
-
-### Flujo de procesamiento
-
-1. **Recepción**: Mensaje llega por serial USB
-2. **Cache GPS**: Actualiza posición si hay datos GPS
-3. **Procesamiento**: Comando procesado según hashtag
-4. **Validación**: Valida GPS y texto para `#osmnote`
-5. **Deduplicación**: Verifica duplicados
-6. **Almacenamiento**: Guarda en SQLite con status 'pending'
-7. **Envío**: Worker intenta enviar a OSM API
-8. **Notificación**: Envía DM con ACK al usuario
-
-## Licencia
-
-Ver archivo [LICENSE](LICENSE).
-
-Este proyecto está licenciado bajo GPL-3.0. Para información sobre cómo citar este software, ver [CITATION.cff](CITATION.cff).
-
-## Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-1. Fork el proyecto: https://github.com/OSM-Notes/osm-mesh-notes-gateway
-2. Crea una rama para tu feature
-3. Commit tus cambios
-4. Push a la rama
-5. Abre un Pull Request
-
-Ver **[CONTRIBUTING.md](CONTRIBUTING.md)** para más detalles.
-
-## Notas importantes
-
-⚠️ **Privacidad**: El sistema incluye advertencias sobre no enviar datos personales ni emergencias médicas en todos los mensajes.
-
-⚠️ **Rate Limiting**: OSM API tiene límites de rate. El sistema respeta mínimo 3 segundos entre envíos.
-
-⚠️ **GPS**: Los dispositivos T-Echo necesitan estar al aire libre 30-60 segundos para obtener GPS válido.
-
-## Soporte
-
-Para reportar problemas o solicitar features, abre un issue en GitHub:
-https://github.com/OSM-Notes/osm-mesh-notes-gateway/issues
