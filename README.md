@@ -193,6 +193,11 @@ Este proyecto fue desarrollado como parte del esfuerzo de mapeo colaborativo par
 
 **Autores**: Ver [AUTHORS](AUTHORS) para la lista completa de contribuidores.
 
+### Publicaciones
+
+- **[OSM Diary](https://www.openstreetmap.org/user/AngocA/diary/408194)** (inglés, alto nivel) - Overview del proyecto y casos de uso
+- **[osm.lat Blog](https://www.osm.lat/reportes-en-terreno-sin-internet-lora-mesh-meshtastic-%e2%86%92-notas-osm-con-gateway-en-raspberry-pi/)** (español, técnico) - Detalles técnicos y guía de despliegue
+
 ---
 
 ## Licencia
