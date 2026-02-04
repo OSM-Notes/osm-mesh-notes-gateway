@@ -197,9 +197,9 @@ El sistema evita crear notas duplicadas si coinciden:
 ## Documentación
 
 - **[README.md](README.md)** - Esta guía de inicio rápido
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Arquitectura del sistema y diseño
+- **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
-- **[MESSAGE_FORMAT.md](MESSAGE_FORMAT.md)** - Formato de mensajes Meshtastic
+- **[docs/message-format.md](docs/message-format.md)** - Formato de mensajes Meshtastic
 
 ## Estructura del proyecto
 
@@ -223,9 +223,13 @@ El sistema evita crear notas duplicadas si coinciden:
 ├── requirements.txt         # Dependencias Python
 ├── setup.py                 # Setup package
 ├── README.md                # Documentación principal
-├── ARCHITECTURE.md          # Arquitectura del sistema
 ├── CONTRIBUTING.md          # Guía de contribución
-└── MESSAGE_FORMAT.md        # Formato de mensajes
+└── docs/                    # Documentación técnica
+    ├── architecture.md      # Arquitectura del sistema
+    ├── message-format.md    # Formato de mensajes
+    ├── API.md               # Referencia de API interna
+    ├── SECURITY.md          # Guía de seguridad
+    └── TROUBLESHOOTING.md   # Solución de problemas
 ```
 
 ## Testing
