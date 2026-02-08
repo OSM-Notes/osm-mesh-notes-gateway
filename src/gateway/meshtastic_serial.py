@@ -129,9 +129,14 @@ class MeshtasticSerial:
             return
 
         try:
+            # Debug: log packet structure
+            logger.debug(f"Received packet: keys={list(packet.keys())}, decoded={packet.get('decoded', {})}")
+            
             # Extract message data
             decoded = packet.get("decoded", {})
             portnum = decoded.get("portnum")
+            
+            logger.debug(f"Portnum: {portnum}, type: {type(portnum)}")
 
             # Handle text messages (portnum can be string "TEXT_MESSAGE_APP" or number)
             if portnum == "TEXT_MESSAGE_APP" or (isinstance(portnum, int) and portnum == 1):
