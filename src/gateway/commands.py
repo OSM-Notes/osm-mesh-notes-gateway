@@ -9,6 +9,7 @@ from .config import (
     POS_GOOD, POS_MAX, DEDUP_TIME_BUCKET_SECONDS,
     MESHTASTIC_MAX_MESSAGE_LENGTH,
     DEVICE_UPTIME_RECENT, DEVICE_UPTIME_GPS_WAIT,
+    GPS_VALIDATION_DISABLED,
 )
 from .database import Database
 from .position_cache import PositionCache
@@ -348,25 +349,46 @@ class CommandProcessor:
 
         # Get position from cache
         position = self.position_cache.get(node_id)
-        if not position:
-            # Check if device was recently started
-            if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
-                wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
-                if wait_time > 0:
-                    return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START.format(
-                        wait_time=wait_time
-                    )
-            return "osmnote_reject", MSG_REJECT_NO_GPS
+        
+        # If GPS validation is disabled, use a default position (Bogotá center)
+        if GPS_VALIDATION_DISABLED:
+            if not position:
+                # Use default position for Bogotá if no GPS available
+                default_lat = 4.6097
+                default_lon = -74.0817
+                logger.warning(f"GPS validation disabled - using default position for {node_id}: ({default_lat}, {default_lon})")
+                # Create a temporary position object
+                from .position_cache import Position
+                position = Position(
+                    lat=default_lat,
+                    lon=default_lon,
+                    received_at=time.time(),
+                    seen_count=1
+                )
+            # Skip GPS validation checks
+            lat = position.lat
+            lon = position.lon
+        else:
+            # Normal GPS validation flow
+            if not position:
+                # Check if device was recently started
+                if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
+                    wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
+                    if wait_time > 0:
+                        return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START.format(
+                            wait_time=wait_time
+                        )
+                return "osmnote_reject", MSG_REJECT_NO_GPS
 
-        # Validate coordinates
-        is_valid, error_msg = self._validate_coordinates(position.lat, position.lon)
-        if not is_valid:
-            return "osmnote_reject", error_msg
+            # Validate coordinates
+            is_valid, error_msg = self._validate_coordinates(position.lat, position.lon)
+            if not is_valid:
+                return "osmnote_reject", error_msg
 
-        # Check position age
-        pos_age = self.position_cache.get_age(node_id)
-        if pos_age is None or pos_age > POS_MAX:
-            # Check if device was recently started
+            # Check position age
+            pos_age = self.position_cache.get_age(node_id)
+            if pos_age is None or pos_age > POS_MAX:
+                # Check if device was recently started
             if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
                 wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
                 if wait_time > 0:

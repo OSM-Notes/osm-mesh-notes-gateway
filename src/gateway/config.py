@@ -38,6 +38,9 @@ SERIAL_PORT = os.getenv("SERIAL_PORT", "/dev/ttyACM0")
 # Dry run mode
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
+# GPS validation bypass (for debugging - set to true to disable GPS freshness checks)
+GPS_VALIDATION_DISABLED = os.getenv("GPS_VALIDATION_DISABLED", "false").lower() == "true"
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
