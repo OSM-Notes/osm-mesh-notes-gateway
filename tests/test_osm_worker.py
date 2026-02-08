@@ -139,14 +139,17 @@ def test_process_pending_success(mock_send, worker, db):
     assert note["osm_note_id"] == 12345
 
 
-@patch('gateway.osm_worker.OSMWorker.send_note')
-def test_process_pending_failure(mock_send, worker, db):
+@patch('gateway.osm_worker.requests.post')
+def test_process_pending_failure(mock_post, worker, db):
     """Test processing pending notes with failure."""
     # Create pending note
     queue_id = db.create_note("node1", 1.0, 2.0, "test", "test")
     
-    # Mock failed send
-    mock_send.return_value = None
+    # Mock failed API call
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.text = "Internal Server Error"
+    mock_post.return_value = mock_response
     
     sent_count = worker.process_pending(limit=10)
     
@@ -155,6 +158,8 @@ def test_process_pending_failure(mock_send, worker, db):
     note = db.get_note_by_queue_id(queue_id)
     assert note["status"] == "pending"
     assert note["last_error"] is not None
+    # Should have retry count
+    assert queue_id in worker.retry_counts
 
 
 @patch('gateway.osm_worker.requests.post')

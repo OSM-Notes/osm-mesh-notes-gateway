@@ -14,6 +14,7 @@ from .config import (
 from .database import Database
 from .commands import MSG_ACK_SUCCESS, MSG_ACK_QUEUED, MSG_Q_TO_NOTE
 from .meshtastic_serial import MeshtasticSerial
+from .geocoding import GeocodingService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class NotificationManager:
         self.serial = serial
         self.db = db
         self.node_notification_times: Dict[str, List[float]] = defaultdict(list)
+        self.geocoding = GeocodingService()
 
     def send_ack(
         self,
@@ -59,7 +61,23 @@ class NotificationManager:
             return
 
         if status == "success" and osm_note_id and osm_note_url:
-            message = MSG_ACK_SUCCESS.format(id=osm_note_id, url=osm_note_url)
+            # Get note location for geocoding
+            location_str = ""
+            if local_queue_id:
+                note_data = self.db.get_note_by_queue_id(local_queue_id)
+                if note_data:
+                    lat = note_data.get("lat")
+                    lon = note_data.get("lon")
+                    if lat and lon:
+                        address = self.geocoding.reverse_geocode(lat, lon)
+                        if address:
+                            location_str = f"📍 Ubicación: {address}\n"
+            
+            message = MSG_ACK_SUCCESS.format(
+                id=osm_note_id,
+                url=osm_note_url,
+                location=location_str
+            )
         elif status == "queued" and local_queue_id:
             message = MSG_ACK_QUEUED.format(queue_id=local_queue_id)
         elif status == "reject":
@@ -109,14 +127,49 @@ class NotificationManager:
             else:
                 # Send individual notifications
                 for note in notes[:NOTIFICATION_ANTI_SPAM_MAX]:
+                    # Get location for geocoding
+                    location_str = ""
+                    lat = note.get("lat")
+                    lon = note.get("lon")
+                    if lat and lon:
+                        address = self.geocoding.reverse_geocode(lat, lon)
+                        if address:
+                            location_str = f"\n📍 Ubicación: {address}"
+                    
                     message = MSG_Q_TO_NOTE.format(
                         queue_id=note["local_queue_id"],
                         note_id=note["osm_note_id"],
                         url=note["osm_note_url"],
-                    )
+                    ) + location_str
+                    
                     if self.serial.send_dm(node_id, message):
                         self.db.mark_notified_sent(note["local_queue_id"])
                         self._record_notification(node_id)
+
+    def process_failed_notifications(self):
+        """Process notifications for notes that failed after max retries."""
+        failed = self.db.get_failed_notes_for_notification()
+        if not failed:
+            return
+
+        # Group by node_id
+        node_notes: Dict[str, List[Dict]] = defaultdict(list)
+        for note in failed:
+            node_notes[note["node_id"]].append(note)
+
+        for node_id, notes in node_notes.items():
+            # Send error notification
+            error_msg = (
+                f"❌ {len(notes)} reporte(s) fallaron después de múltiples intentos.\n"
+                f"Error: {notes[0].get('last_error', 'Error desconocido')[:100]}\n"
+                f"Usa #osmlist para ver detalles.\n"
+                f"⚠️ No envíes datos personales ni emergencias médicas."
+            )
+            if self.serial.send_dm(node_id, error_msg):
+                # Mark as notified
+                for note in notes:
+                    self.db.mark_notified_sent(note["local_queue_id"])
+                self._record_notification(node_id)
 
     def _send_dm_with_antispam(self, node_id: str, message: str):
         """Send DM with anti-spam check."""

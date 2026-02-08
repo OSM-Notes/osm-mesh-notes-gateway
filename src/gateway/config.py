@@ -59,6 +59,24 @@ DEDUP_LOCATION_PRECISION = 4  # decimal places for lat/lon
 # OSM API
 OSM_API_URL = "https://api.openstreetmap.org/api/0.6/notes.json"
 OSM_RATE_LIMIT_SECONDS = 3
+OSM_MAX_RETRIES = 3  # Maximum retry attempts for failed OSM API calls
+OSM_RETRY_DELAY_SECONDS = 60  # Delay between retries
+
+# Nominatim reverse geocoding API
+NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/reverse"
+NOMINATIM_RATE_LIMIT_SECONDS = 1  # Nominatim requires max 1 request per second
+NOMINATIM_TIMEOUT = 5  # seconds
+
+# Meshtastic message limits
+MESHTASTIC_MAX_MESSAGE_LENGTH = 200  # Safe limit (theoretical max is ~237 bytes)
+
+# Rate limiting per user
+USER_RATE_LIMIT_WINDOW = 60  # seconds
+USER_RATE_LIMIT_MAX_MESSAGES = 5  # max messages per window per user
+
+# Device uptime thresholds (seconds)
+DEVICE_UPTIME_RECENT = 120  # Device is "recently started" if uptime < this
+DEVICE_UPTIME_GPS_WAIT = 60  # Wait time for GPS fix after device start
 
 # Worker intervals (seconds)
 WORKER_INTERVAL = 30

@@ -15,9 +15,9 @@ def db(tmp_path):
 
 
 @pytest.fixture
-def position_cache():
+def position_cache(db):
     """Create position cache."""
-    return PositionCache()
+    return PositionCache(db=db)
 
 
 @pytest.fixture

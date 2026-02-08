@@ -17,9 +17,9 @@ def db(tmp_path):
 
 
 @pytest.fixture
-def position_cache():
-    """Create position cache."""
-    return PositionCache()
+def position_cache(db):
+    """Create position cache with database."""
+    return PositionCache(db=db)
 
 
 @pytest.fixture
@@ -82,10 +82,11 @@ def test_osmnote_no_gps(processor, db):
 
 def test_osmnote_stale_gps(processor, db, position_cache):
     """Test osmnote with stale GPS."""
+    from gateway.config import POS_MAX
     node_id = "test_node"
     position_cache.update(node_id, 1.0, 2.0)
-    # Simulate old position
-    position_cache.positions[node_id].received_at = time.time() - 70
+    # Simulate old position (older than POS_MAX)
+    position_cache.positions[node_id].received_at = time.time() - (POS_MAX + 10)
     
     cmd_type, response = processor.process_message(node_id, "#osmnote test")
     assert cmd_type == "osmnote_reject"
@@ -168,3 +169,32 @@ def test_osmqueue(processor, db):
     assert cmd_type == "osmqueue"
     assert response is not None
     assert "Cola:" in response
+
+
+def test_osmnote_rate_limiting(processor, position_cache):
+    """Test that rate limiting is applied to osmnote commands."""
+    node_id = "test_node"
+    position_cache.update(node_id, 4.6097, -74.0817)
+    
+    from gateway.config import USER_RATE_LIMIT_MAX_MESSAGES
+    
+    # Send messages up to limit
+    for i in range(USER_RATE_LIMIT_MAX_MESSAGES):
+        cmd_type, response = processor.process_message(node_id, f"#osmnote test {i}")
+        assert cmd_type == "osmnote_queued"
+    
+    # Next message should be rate limited
+    cmd_type, response = processor.process_message(node_id, "#osmnote test final")
+    assert cmd_type == "osmnote_reject"
+    assert "Límite de mensajes" in response
+
+
+def test_osmnote_no_rate_limit_on_help(processor):
+    """Test that help commands are not rate limited."""
+    node_id = "test_node"
+    
+    # Send many help commands - should all work
+    for i in range(10):
+        cmd_type, response = processor.process_message(node_id, "#osmhelp")
+        assert cmd_type == "osmhelp"
+        assert response is not None

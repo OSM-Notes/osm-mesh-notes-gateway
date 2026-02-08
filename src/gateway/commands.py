@@ -5,9 +5,15 @@ import logging
 from typing import Optional, Tuple
 from datetime import datetime
 
-from .config import POS_GOOD, POS_MAX, DEDUP_TIME_BUCKET_SECONDS
+from .config import (
+    POS_GOOD, POS_MAX, DEDUP_TIME_BUCKET_SECONDS,
+    MESHTASTIC_MAX_MESSAGE_LENGTH,
+    DEVICE_UPTIME_RECENT, DEVICE_UPTIME_GPS_WAIT,
+)
 from .database import Database
 from .position_cache import PositionCache
+from .rate_limiter import RateLimiter
+from .geocoding import GeocodingService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +29,7 @@ MSG_ACK_SUCCESS = (
     "✅ Reporte recibido y nota creada en OSM.\n"
     "📝 Nota: #{id}\n"
     "{url}\n"
+    "{location}\n"
     "⚠️ No envíes datos personales ni emergencias médicas."
 )
 
@@ -35,6 +42,24 @@ MSG_ACK_QUEUED = (
 MSG_REJECT_NO_GPS = (
     "❌ Reporte recibido, pero no hay GPS reciente del dispositivo.\n"
     "Mantén el T‑Echo encendido al aire libre 30–60 s y reenvía.\n"
+    "⚠️ No envíes datos personales ni emergencias médicas."
+)
+
+MSG_REJECT_NO_GPS_RECENT_START = (
+    "❌ El dispositivo se prendió hace poco, por lo que la posición no es precisa.\n"
+    "Espera {wait_time} segundos más para que el GPS se estabilice y reenvía.\n"
+    "⚠️ No envíes datos personales ni emergencias médicas."
+)
+
+MSG_REJECT_INVALID_COORDS = (
+    "❌ Las coordenadas GPS recibidas son inválidas.\n"
+    "Verifica que el GPS esté funcionando correctamente.\n"
+    "⚠️ No envíes datos personales ni emergencias médicas."
+)
+
+MSG_REJECT_MESSAGE_TOO_LONG = (
+    "❌ El mensaje es demasiado largo (máximo {max_len} caracteres).\n"
+    "Acorta el mensaje y reenvía.\n"
     "⚠️ No envíes datos personales ni emergencias médicas."
 )
 
@@ -92,6 +117,8 @@ class CommandProcessor:
     def __init__(self, db: Database, position_cache: PositionCache):
         self.db = db
         self.position_cache = position_cache
+        self.rate_limiter = RateLimiter()
+        self.geocoding = GeocodingService()
 
     def normalize_text(self, text: str) -> str:
         """Normalize text for deduplication."""
@@ -133,6 +160,7 @@ class CommandProcessor:
         lat: Optional[float] = None,
         lon: Optional[float] = None,
         timestamp: Optional[float] = None,
+        device_uptime: Optional[float] = None,
     ) -> Tuple[str, Optional[str]]:
         """
         Process incoming message and return command type and response.
@@ -193,7 +221,12 @@ class CommandProcessor:
         # Check for osmnote
         osmnote_text = self.extract_osmnote(text)
         if osmnote_text is not None:
-            return self._handle_osmnote(node_id, osmnote_text, timestamp)
+            # Check rate limit first
+            allowed, rate_limit_msg = self.rate_limiter.check_rate_limit(node_id)
+            if not allowed:
+                return "osmnote_reject", rate_limit_msg
+            
+            return self._handle_osmnote(node_id, osmnote_text, timestamp, device_uptime)
 
         # Ignore other messages
         return "ignore", None
@@ -271,14 +304,41 @@ class CommandProcessor:
         )
         return "osmqueue", queue_msg
 
+    def _validate_coordinates(self, lat: float, lon: float) -> Tuple[bool, Optional[str]]:
+        """
+        Validate GPS coordinates.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check for invalid coordinates (0,0 is often a default/error value)
+        if lat == 0.0 and lon == 0.0:
+            return False, MSG_REJECT_INVALID_COORDS
+        
+        # Check valid ranges
+        if not (-90 <= lat <= 90):
+            return False, MSG_REJECT_INVALID_COORDS
+        
+        if not (-180 <= lon <= 180):
+            return False, MSG_REJECT_INVALID_COORDS
+        
+        return True, None
+
     def _handle_osmnote(
         self,
         node_id: str,
         text: str,
         timestamp: Optional[float],
+        device_uptime: Optional[float] = None,
     ) -> Tuple[str, Optional[str]]:
         """Handle #osmnote command."""
         import time
+
+        # Check message length
+        if len(text) > MESHTASTIC_MAX_MESSAGE_LENGTH:
+            return "osmnote_reject", MSG_REJECT_MESSAGE_TOO_LONG.format(
+                max_len=MESHTASTIC_MAX_MESSAGE_LENGTH
+            )
 
         # Check if text is empty (only hashtag)
         if not text or not text.strip():
@@ -289,11 +349,30 @@ class CommandProcessor:
         # Get position from cache
         position = self.position_cache.get(node_id)
         if not position:
+            # Check if device was recently started
+            if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
+                wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
+                if wait_time > 0:
+                    return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START.format(
+                        wait_time=wait_time
+                    )
             return "osmnote_reject", MSG_REJECT_NO_GPS
+
+        # Validate coordinates
+        is_valid, error_msg = self._validate_coordinates(position.lat, position.lon)
+        if not is_valid:
+            return "osmnote_reject", error_msg
 
         # Check position age
         pos_age = self.position_cache.get_age(node_id)
         if pos_age is None or pos_age > POS_MAX:
+            # Check if device was recently started
+            if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
+                wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
+                if wait_time > 0:
+                    return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START.format(
+                        wait_time=wait_time
+                    )
             return "osmnote_reject", MSG_REJECT_STALE_GPS
 
         # Determine if position is approximate

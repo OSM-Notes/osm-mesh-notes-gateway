@@ -202,6 +202,19 @@ class MeshtasticSerial:
             lat = position.get("lat")
             lon = position.get("lon")
 
+            # Try to get device uptime from node info
+            device_uptime = None
+            try:
+                if self.interface:
+                    node_info = self.interface.nodes.get(node_id)
+                    if node_info:
+                        # Check for device metrics with uptime
+                        device_metrics = node_info.get("deviceMetrics")
+                        if device_metrics:
+                            device_uptime = device_metrics.get("uptimeSeconds")
+            except Exception as e:
+                logger.debug(f"Could not get device uptime for {node_id}: {e}")
+
             logger.info(f"Received message from {node_id}: {text[:50]}...")
 
             # Call callback with message data
@@ -211,6 +224,7 @@ class MeshtasticSerial:
                 "lon": lon,
                 "text": text,
                 "timestamp": time.time(),
+                "device_uptime": device_uptime,  # Seconds since device boot
             })
 
         except Exception as e:

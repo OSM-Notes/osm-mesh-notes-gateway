@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 
-from .config import DB_PATH, DEDUP_LOCATION_PRECISION, DEDUP_TIME_BUCKET_SECONDS
+from .config import DB_PATH, DEDUP_LOCATION_PRECISION, DEDUP_TIME_BUCKET_SECONDS, OSM_MAX_RETRIES
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,14 @@ class Database:
     def _init_db(self):
         """Initialize database schema."""
         with self._get_connection() as conn:
+            # Configure SQLite for power loss tolerance
+            # WAL mode provides better concurrency and crash recovery
+            conn.execute("PRAGMA journal_mode=WAL")
+            # Full sync for data integrity (slower but safer for power loss)
+            conn.execute("PRAGMA synchronous=FULL")
+            # Checkpoint WAL periodically to prevent it from growing too large
+            conn.execute("PRAGMA wal_autocheckpoint=1000")
+            
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +49,16 @@ class Database:
                 )
             """)
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS position_cache (
+                    node_id TEXT PRIMARY KEY,
+                    lat REAL NOT NULL,
+                    lon REAL NOT NULL,
+                    received_at REAL NOT NULL,
+                    seen_count INTEGER DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_notes_node_id ON notes(node_id)
             """)
             conn.execute("""
@@ -57,9 +75,24 @@ class Database:
 
     @contextmanager
     def _get_connection(self):
-        """Get database connection with proper error handling."""
+        """
+        Get database connection with proper error handling and power loss tolerance.
+        
+        Configures SQLite with:
+        - WAL mode for better concurrency and crash recovery
+        - FULL synchronous mode for data integrity during power loss
+        - Proper timeout for busy database handling
+        """
         conn = sqlite3.connect(self.db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row
+        
+        # Configure for power loss tolerance (if not already set)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=FULL")
+        except sqlite3.Error:
+            pass  # May fail if database is locked, that's OK
+        
         try:
             yield conn
         except sqlite3.Error as e:
@@ -181,9 +214,14 @@ class Database:
             conn.commit()
             logger.info(f"Marked note {local_queue_id} as sent (OSM #{osm_note_id})")
 
-    def update_note_error(self, local_queue_id: str, error: str):
-        """Update note with error message."""
+    def update_note_error(self, local_queue_id: str, error: str, retry_count: Optional[int] = None):
+        """Update note with error message and optionally retry count."""
         with self._get_connection() as conn:
+            if retry_count is not None:
+                # Store retry count in error message for now (could add retry_count column later)
+                error_with_retry = f"{error} (intento {retry_count}/{OSM_MAX_RETRIES})"
+            else:
+                error_with_retry = error
             conn.execute("""
                 UPDATE notes
                 SET last_error = ?
@@ -302,3 +340,66 @@ class Database:
                 ORDER BY sent_at ASC
             """)
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_failed_notes_for_notification(self) -> List[Dict[str, Any]]:
+        """Get notes that failed after max retries and need error notification."""
+        with self._get_connection() as conn:
+            # Get notes with errors that mention max retries
+            cursor = conn.execute("""
+                SELECT * FROM notes
+                WHERE status = 'pending' 
+                  AND last_error IS NOT NULL
+                  AND last_error LIKE '%intento%/%'
+                  AND notified_sent = 0
+                ORDER BY created_at ASC
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def save_position(self, node_id: str, lat: float, lon: float, received_at: float, seen_count: int = 1):
+        """Save or update position in persistent cache."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO position_cache (node_id, lat, lon, received_at, seen_count, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(node_id) DO UPDATE SET
+                    lat = excluded.lat,
+                    lon = excluded.lon,
+                    received_at = excluded.received_at,
+                    seen_count = seen_count + 1,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (node_id, lat, lon, received_at, seen_count))
+            conn.commit()
+
+    def get_position(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Get position from persistent cache."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT node_id, lat, lon, received_at, seen_count
+                FROM position_cache
+                WHERE node_id = ?
+            """, (node_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def load_all_positions(self) -> Dict[str, Dict[str, Any]]:
+        """Load all positions from persistent cache."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT node_id, lat, lon, received_at, seen_count
+                FROM position_cache
+            """)
+            return {row["node_id"]: dict(row) for row in cursor.fetchall()}
+
+    def cleanup_old_positions(self, max_age_seconds: float = 86400):
+        """Remove positions older than max_age_seconds (default: 24 hours)."""
+        import time
+        cutoff_time = time.time() - max_age_seconds
+        with self._get_connection() as conn:
+            conn.execute("""
+                DELETE FROM position_cache
+                WHERE received_at < ?
+            """, (cutoff_time,))
+            conn.commit()
+            deleted = conn.total_changes
+            if deleted > 0:
+                logger.debug(f"Cleaned up {deleted} old positions from cache")

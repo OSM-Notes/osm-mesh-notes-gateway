@@ -225,14 +225,16 @@ Worker Thread (cada 30s):
 ## Escalabilidad
 
 **Limitaciones actuales**:
-- Cache GPS: En memoria (se pierde al reiniciar)
 - Base de datos: SQLite (single-writer)
-- Rate limiting: Global (no por nodo)
+- Rate limiting: Por usuario (implementado)
+
+**Características implementadas**:
+- Cache GPS persistente en SQLite (sobrevive a reinicios y cortes de energía)
+- SQLite configurado con WAL mode y FULL sync para tolerancia a cortes de energía
+- Rate limiting por usuario para prevenir spam
 
 **Mejoras futuras**:
-- Persistir cache GPS en DB
 - Migrar a PostgreSQL para múltiples writers
-- Rate limiting por nodo
 - Métricas y monitoreo
 
 ## Seguridad

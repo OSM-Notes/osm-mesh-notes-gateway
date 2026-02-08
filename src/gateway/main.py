@@ -60,7 +60,8 @@ class Gateway:
     def __init__(self):
         self.running = False
         self.db = Database()
-        self.position_cache = PositionCache()
+        # PositionCache now uses the same database for persistence
+        self.position_cache = PositionCache(db=self.db)
         self.serial = MeshtasticSerial()
         self.command_processor = CommandProcessor(self.db, self.position_cache)
         self.osm_worker = OSMWorker(self.db)
@@ -91,6 +92,7 @@ class Gateway:
         lat = msg.get("lat")
         lon = msg.get("lon")
         timestamp = msg.get("timestamp")
+        device_uptime = msg.get("device_uptime")  # Seconds since device boot
 
         if not node_id:
             logger.warning("Received message without node_id")
@@ -109,6 +111,7 @@ class Gateway:
             lat=lat,
             lon=lon,
             timestamp=timestamp,
+            device_uptime=device_uptime,
         )
 
         # Handle response
@@ -190,6 +193,9 @@ class Gateway:
 
                 # Process sent notifications
                 self.notifications.process_sent_notifications()
+                
+                # Process failed notifications
+                self.notifications.process_failed_notifications()
 
                 # Daily broadcast (optional)
                 if DAILY_BROADCAST_ENABLED:
