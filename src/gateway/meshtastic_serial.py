@@ -7,9 +7,11 @@ from typing import Optional, Callable, Dict, Any
 
 try:
     import meshtastic.serial_interface
+    from pubsub import pub
     MESHTASTIC_AVAILABLE = True
 except ImportError:
     MESHTASTIC_AVAILABLE = False
+    pub = None
 
 from .config import SERIAL_PORT
 
@@ -108,14 +110,17 @@ class MeshtasticSerial:
 
         self.running = True
 
-        # Subscribe to receive messages
-        self.interface.subscribe(self._on_receive)
+        # Subscribe to receive messages using pubsub
+        pub.subscribe(self._on_receive, "meshtastic.receive")
 
         logger.info("Meshtastic serial reader started")
 
     def stop(self):
         """Stop message listener."""
         self.running = False
+        # Unsubscribe from messages
+        if pub:
+            pub.unsubscribe(self._on_receive, "meshtastic.receive")
         self.disconnect()
 
     def _on_receive(self, packet, interface):
