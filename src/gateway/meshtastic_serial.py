@@ -111,7 +111,10 @@ class MeshtasticSerial:
         self.running = True
 
         # Subscribe to receive messages using pubsub
-        pub.subscribe(self._on_receive, "meshtastic.receive")
+        # meshtastic-python publishes decoded text messages to meshtastic.receive.text
+        # and position messages to meshtastic.receive.position
+        pub.subscribe(self._on_receive_text, "meshtastic.receive.text")
+        pub.subscribe(self._on_receive_position, "meshtastic.receive.position")
 
         logger.info("Meshtastic serial reader started")
 
@@ -120,7 +123,8 @@ class MeshtasticSerial:
         self.running = False
         # Unsubscribe from messages
         if pub:
-            pub.unsubscribe(self._on_receive, "meshtastic.receive")
+            pub.unsubscribe(self._on_receive_text, "meshtastic.receive.text")
+            pub.unsubscribe(self._on_receive_position, "meshtastic.receive.position")
         self.disconnect()
 
     def _on_receive(self, packet, interface):
