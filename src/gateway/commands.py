@@ -39,7 +39,7 @@ MSG_REJECT_NO_GPS = (
 )
 
 MSG_REJECT_STALE_GPS = (
-    "❌ Reporte recibido, pero la última posición es muy vieja (>60 s).\n"
+    "❌ Reporte recibido, pero la última posición es muy vieja (>2 min).\n"
     "Espera a que el GPS se actualice y reenvía.\n"
     "⚠️ No envíes datos personales ni emergencias médicas."
 )

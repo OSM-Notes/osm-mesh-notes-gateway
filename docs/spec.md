@@ -81,13 +81,15 @@ El usuario recibe un DM con confirmación y recordatorio de privacidad.
 
 ### Umbrales cerrados (MVP)
 - `POS_GOOD = 15 s`
-- `POS_MAX  = 60 s`
+- `POS_MAX  = 120 s` (2 minutos)
 
 Decisión:
 - Si **no hay** posición reciente en cache → **rechazar** (no crear nota).
-- Si `pos_age > 60 s` → **rechazar**.
-- Si `15 < pos_age ≤ 60` → **aceptar** pero marcar "posición aproximada".
+- Si `pos_age > 120 s` → **rechazar**.
+- Si `15 < pos_age ≤ 120` → **aceptar** pero marcar "posición aproximada".
 - Si `pos_age ≤ 15` → **aceptar** normal.
+
+**Nota**: `POS_MAX` se aumentó de 60s a 120s para acomodar el intervalo mínimo de broadcast de posición (60s) y la latencia de la red mesh.
 
 ---
 

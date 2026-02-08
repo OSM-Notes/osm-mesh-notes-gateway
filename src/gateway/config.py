@@ -45,8 +45,12 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 TZ = os.getenv("TZ", "America/Bogota")
 
 # GPS validation thresholds (seconds)
+# POS_GOOD: Position is considered "good" if less than this age
+# POS_MAX: Maximum acceptable position age (reject if older)
+# Note: With minimum broadcast interval of 60s, we allow up to 120s to account
+# for mesh network latency and timing variations
 POS_GOOD = 15
-POS_MAX = 60
+POS_MAX = 120  # Increased from 60 to 120 seconds to accommodate 60s broadcast minimum
 
 # Deduplication settings
 DEDUP_TIME_BUCKET_SECONDS = 120
