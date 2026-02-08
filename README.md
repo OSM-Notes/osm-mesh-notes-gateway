@@ -122,7 +122,8 @@ sudo journalctl -u lora-osmnotes -f
 Desde la app Meshtastic en tu teléfono (conectado por Bluetooth al T-Echo):
 
 - `#osmnote Árbol caído bloquea la calle` - Crea una nota de OSM
-- `#osmhelp` - Muestra ayuda
+- `#osmhelp` - Muestra ayuda básica
+- `#osmmorehelp` - Muestra ayuda adicional detallada
 - `#osmstatus` - Verifica estado del gateway
 - `#osmlist` - Lista tus notas recientes
 
@@ -160,7 +161,7 @@ Este sistema **NO debe usarse** para:
 
 ### 📍 **Alcance del sistema**
 
-El gateway procesa **solo** mensajes que contengan comandos específicos (hashtags como `#osmnote`, `#osmhelp`, etc.). Los mensajes de texto libre sin comandos son ignorados y no se responde a ellos.
+El gateway procesa **solo** mensajes que contengan comandos específicos (hashtags como `#osmnote`, `#osmhelp`, `#osmmorehelp`, etc.). Los mensajes de texto libre sin comandos son ignorados y no se responde a ellos.
 
 ---
 
@@ -171,7 +172,8 @@ Los usuarios pueden enviar comandos desde la app Meshtastic:
 | Comando | Descripción |
 |---------|-------------|
 | `#osmnote <mensaje>` | Crea una nota de OSM. Requiere GPS reciente (≤60s) |
-| `#osmhelp` | Muestra instrucciones de uso |
+| `#osmhelp` | Muestra instrucciones de uso básicas |
+| `#osmmorehelp` | Muestra ayuda adicional detallada |
 | `#osmstatus` | Estado del gateway (activo, Internet, colas) |
 | `#osmcount` | Conteo de notas creadas (hoy + total) |
 | `#osmlist [n]` | Lista últimas `n` notas (default: 5, max: 20) |

@@ -210,8 +210,9 @@ class NotificationManager:
             for i, part in enumerate(parts):
                 if i > 0:
                     # Wait between parts to avoid overwhelming the node
+                    # Increased delay to 3 seconds for better reliability
                     logger.debug(f"Waiting before sending ACK part {i+1}/{len(parts)}")
-                    time.sleep(2.0)
+                    time.sleep(3.0)
                 success = self.serial.send_dm(node_id, part)
                 if success:
                     logger.info(f"Successfully sent ACK part {i+1}/{len(parts)} to {node_id} ({len(part.encode('utf-8'))} bytes)")
@@ -251,9 +252,9 @@ class NotificationManager:
             if i > 0:
                 # Longer delay between parts to ensure mesh network can handle them
                 # Meshtastic mesh networks may need more time to propagate messages
-                # Increased delay to 2 seconds to reduce packet loss
+                # Increased delay to 3.5 seconds to reduce packet loss (especially for osmhelp/osmmorehelp)
                 logger.debug(f"Waiting before sending part {i+1}/{len(parts)}")
-                time.sleep(2.0)
+                time.sleep(3.5)
             success = self.serial.send_dm(node_id, part)
             if success:
                 logger.info(f"Successfully sent part {i+1}/{len(parts)} to {node_id} ({len(part.encode('utf-8'))} bytes)")
