@@ -81,11 +81,57 @@ class MeshtasticSerial:
                 connectNow=True,
             )
             logger.info(f"Connected to Meshtastic device at {self.port}")
+            
+            # Check if device is T-Echo and configure GPS broadcast if needed
+            self._configure_techo_gps()
+            
             return True
         except Exception as e:
             logger.error(f"Failed to connect to {self.port}: {e}")
             self.interface = None
             return False
+
+    def _configure_techo_gps(self):
+        """Configure GPS broadcast interval for T-Echo devices."""
+        try:
+            # Get device info to detect T-Echo
+            node_info = self.interface.getMyNodeInfo()
+            hardware = node_info.get("hardware", "")
+            
+            # Check if it's a T-Echo (Lilygo T-Echo)
+            # T-Echo devices typically have "TECHO" or "t-echo" in hardware/model
+            is_techo = (
+                "techo" in str(hardware).lower() or
+                "t-echo" in str(hardware).lower() or
+                "lilygo" in str(hardware).lower()
+            )
+            
+            if not is_techo:
+                # Also check pio_env which might contain device info
+                pio_env = node_info.get("pio_env", "")
+                is_techo = "techo" in str(pio_env).lower() or "t-echo" in str(pio_env).lower()
+            
+            if is_techo:
+                logger.info("T-Echo device detected, configuring GPS broadcast interval to 60 seconds")
+                try:
+                    # Get local node configuration
+                    local_node = self.interface.getNode("^local")
+                    
+                    # Configure position broadcast interval to 60 seconds (minimum)
+                    # This is the interval at which position updates are broadcast
+                    if hasattr(local_node, "localConfig") and hasattr(local_node.localConfig, "position"):
+                        # Set position broadcast interval to 60 seconds
+                        local_node.localConfig.position.position_broadcast_secs = 60
+                        local_node.writeConfig("position")
+                        logger.info("Configured T-Echo GPS broadcast interval to 60 seconds")
+                    else:
+                        logger.warning("Could not access position config, skipping GPS configuration")
+                except Exception as e:
+                    logger.warning(f"Failed to configure T-Echo GPS settings: {e}")
+            else:
+                logger.debug(f"Device is not T-Echo (hardware: {hardware}), skipping GPS configuration")
+        except Exception as e:
+            logger.debug(f"Could not detect device type or configure GPS: {e}")
 
     def disconnect(self):
         """Disconnect from Meshtastic device."""

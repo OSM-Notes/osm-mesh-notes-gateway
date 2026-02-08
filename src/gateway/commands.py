@@ -52,7 +52,17 @@ MSG_DUPLICATE = (
 MSG_HELP = (
     "ℹ️ Para crear una nota de mapeo escribe:\n"
     "#osmnote <tu mensaje>\n\n"
-    "Usa #osmstatus para ver estado.\n"
+    "Usa #osmstatus para ver estado.\n\n"
+    "📱 Configuración T‑Echo recomendada:\n"
+    "• Position Broadcast: 60 segundos (mínimo)\n"
+    "• Smart Broadcast Min Interval: 15 segundos\n"
+    "• Smart Broadcast Min Distance: 100 metros\n"
+    "• Device GPS Update: 120 segundos (2 min)\n\n"
+    "Configura desde la app Meshtastic:\n"
+    "Radio → Position → Position Broadcast Interval: 60\n"
+    "Radio → Position → Smart Broadcast Min Interval: 15\n"
+    "Radio → Position → Smart Broadcast Min Distance: 100\n"
+    "Device → GPS → Update Interval: 120\n\n"
     "⚠️ No envíes datos personales ni emergencias médicas."
 )
 
