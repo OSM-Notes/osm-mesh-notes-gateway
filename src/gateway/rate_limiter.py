@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 
 from .config import USER_RATE_LIMIT_WINDOW, USER_RATE_LIMIT_MAX_MESSAGES
+from .i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +25,13 @@ class RateLimiter:
         self._cleanup_interval = 300  # Clean up old entries every 5 minutes
         self._last_cleanup = time.time()
 
-    def check_rate_limit(self, node_id: str) -> Tuple[bool, Optional[str]]:
+    def check_rate_limit(self, node_id: str, locale: str = "es") -> Tuple[bool, Optional[str]]:
         """
         Check if user has exceeded rate limit.
         
         Args:
             node_id: Meshtastic node ID
+            locale: User's preferred language
             
         Returns:
             Tuple of (allowed, message):
@@ -54,9 +56,9 @@ class RateLimiter:
         if len(timestamps) >= USER_RATE_LIMIT_MAX_MESSAGES:
             remaining_time = int(timestamps[0] + USER_RATE_LIMIT_WINDOW - now)
             error_msg = (
-                f"❌ Límite de mensajes alcanzado.\n"
-                f"Espera {remaining_time} segundos antes de enviar otro mensaje.\n"
-                f"⚠️ No envíes datos personales ni emergencias médicas."
+                _("❌ Límite de mensajes alcanzado.\n", locale)
+                + _("Espera {time} segundos antes de enviar otro mensaje.\n", locale).format(time=remaining_time)
+                + _("⚠️ No envíes datos personales ni emergencias médicas.", locale)
             )
             logger.warning(f"Rate limit exceeded for {node_id}: {len(timestamps)} messages in window")
             return False, error_msg

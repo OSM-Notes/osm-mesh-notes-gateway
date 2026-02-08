@@ -87,6 +87,9 @@ class MeshtasticSerial:
             )
             logger.info(f"Connected to Meshtastic device at {self.port}")
             
+            # Configure gateway device role to CLIENT_MUTE
+            self._configure_gateway_role()
+
             # Check if device is T-Echo and configure GPS broadcast if needed
             self._configure_techo_gps()
             
@@ -95,6 +98,46 @@ class MeshtasticSerial:
             logger.error(f"Failed to connect to {self.port}: {e}")
             self.interface = None
             return False
+
+    def _configure_gateway_role(self):
+        """Configure gateway device role to CLIENT_MUTE.
+
+        CLIENT_MUTE is appropriate for gateway devices because:
+        - They can send and receive messages (needed for gateway functionality)
+        - They don't forward/repeat messages from other nodes (reduces network traffic)
+        - They're not infrastructure nodes, just access points
+        """
+        try:
+            # Get local node configuration
+            local_node = self.interface.getNode("^local")
+
+            if not hasattr(local_node, "localConfig") or not hasattr(local_node.localConfig, "device"):
+                logger.warning("Could not access device config, skipping role configuration")
+                return
+
+            # Check current role
+            current_role = local_node.localConfig.device.role
+
+            # CLIENT_MUTE = 1 (from meshtastic portnums.py)
+            # We need to import or use the constant value
+            try:
+                # Try to import the constant from meshtastic
+                import meshtastic.portnums_pb2 as portnums
+                CLIENT_MUTE = portnums.Role.CLIENT_MUTE
+            except (ImportError, AttributeError):
+                # Fallback: use numeric value (CLIENT_MUTE = 1)
+                CLIENT_MUTE = 1
+
+            # Only configure if not already set to CLIENT_MUTE
+            if current_role != CLIENT_MUTE:
+                logger.info(f"Configuring gateway device role to CLIENT_MUTE (current: {current_role})")
+                local_node.localConfig.device.role = CLIENT_MUTE
+                local_node.writeConfig("device")
+                logger.info("Configured gateway device role to CLIENT_MUTE")
+            else:
+                logger.debug(f"Gateway device role already set to CLIENT_MUTE ({current_role})")
+        except Exception as e:
+            logger.warning(f"Failed to configure gateway device role: {e}")
 
     def _configure_techo_gps(self):
         """Configure GPS broadcast interval for T-Echo devices."""
@@ -202,17 +245,22 @@ class MeshtasticSerial:
                 if not node_id.startswith("!") and len(node_id) > 0:
                     node_id = f"!{node_id}"
 
+            # Initialize position variables using a list to avoid Python scope issues
+            # Python treats variables assigned in nested try blocks as local, causing UnboundLocalError
+            position_data = [None, None]  # [lat, lon]
+            
             # Get position from cache if available
             if self._use_position_cache:
                 # Use PositionCache API
                 pos = self.position_cache.get(node_id)
-                lat = pos.lat if pos else None
-                lon = pos.lon if pos else None
+                if pos:
+                    position_data[0] = pos.lat
+                    position_data[1] = pos.lon
             else:
                 # Use simple dict cache (backward compatibility)
                 position = self.position_cache.get(node_id, {})
-                lat = position.get("lat")
-                lon = position.get("lon")
+                position_data[0] = position.get("lat")
+                position_data[1] = position.get("lon")
 
             # Try to get device uptime and position from node info
             device_uptime = None
@@ -228,7 +276,11 @@ class MeshtasticSerial:
                     
                     if node_num:
                         logger.debug(f"Looking up node info for {node_id} (node_num={node_num})")
-                        node_info = self.interface.nodes.get(node_num)
+                        try:
+                            node_info = self.interface.nodes.get(node_num)
+                        except Exception as e:
+                            logger.warning(f"Error getting node info for {node_id}: {e}")
+                            node_info = None
                         if node_info:
                             logger.debug(f"Node info for {node_id}: {list(node_info.keys())}")
                             
@@ -241,7 +293,7 @@ class MeshtasticSerial:
                                 logger.debug(f"No deviceMetrics found for {node_id}")
                             
                             # Try to get position from nodeinfo if not in cache
-                            if lat is None or lon is None:
+                            if position_data[0] is None or position_data[1] is None:
                                 position_info = node_info.get("position")
                                 logger.debug(f"Position info for {node_id}: {position_info}")
                                 
@@ -253,20 +305,24 @@ class MeshtasticSerial:
                                         logger.debug(f"Position integers for {node_id}: lat_i={lat_i}, lon_i={lon_i}")
                                         
                                         if lat_i is not None and lon_i is not None:
-                                            lat = lat_i / 1e7
-                                            lon = lon_i / 1e7
-                                            logger.info(f"Got position from nodeinfo for {node_id}: ({lat}, {lon})")
+                                            # Calculate position from nodeinfo
+                                            node_lat = lat_i / 1e7
+                                            node_lon = lon_i / 1e7
+                                            logger.info(f"Got position from nodeinfo for {node_id}: ({node_lat}, {node_lon})")
                                             
                                             # Update cache with position from nodeinfo
                                             if self._use_position_cache:
-                                                self.position_cache.update(node_id, lat, lon)
+                                                self.position_cache.update(node_id, node_lat, node_lon)
                                             else:
                                                 with self._lock:
                                                     self.position_cache[node_id] = {
-                                                        "lat": lat,
-                                                        "lon": lon,
+                                                        "lat": node_lat,
+                                                        "lon": node_lon,
                                                         "timestamp": time.time(),
                                                     }
+                                            # Update position_data
+                                            position_data[0] = node_lat
+                                            position_data[1] = node_lon
                                             logger.info(f"Updated position cache from nodeinfo for {node_id}")
                                         else:
                                             logger.debug(f"Position integers are None for {node_id}")
@@ -282,20 +338,26 @@ class MeshtasticSerial:
                 logger.warning(f"Could not get device info for {node_id}: {e}", exc_info=True)
 
             logger.info(f"Received message from {node_id}: {text[:50]}...")
-            logger.debug(f"Position for {node_id} when processing message: lat={lat}, lon={lon}")
+            # Use position_data directly to avoid Python scope issues
+            pos_lat = position_data[0]
+            pos_lon = position_data[1]
+            # Avoid using 'lat' or 'lon' in f-string to prevent Python scope detection
+            logger.debug(f"Position for {node_id} when processing message: latitude={pos_lat}, longitude={pos_lon}")
 
             # Call callback with message data
             self.message_callback({
                 "node_id": node_id,
-                "lat": lat,
-                "lon": lon,
+                "lat": pos_lat,
+                "lon": pos_lon,
                 "text": text,
                 "timestamp": time.time(),
                 "device_uptime": device_uptime,  # Seconds since device boot
             })
 
         except Exception as e:
+            import traceback
             logger.error(f"Error processing text message: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def _on_receive_position(self, packet, interface):
         """Handle received position update from Meshtastic."""

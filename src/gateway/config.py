@@ -89,3 +89,6 @@ NOTIFICATION_ANTI_SPAM_MAX = 3  # max notifications per window
 
 # Daily broadcast (optional)
 DAILY_BROADCAST_ENABLED = os.getenv("DAILY_BROADCAST_ENABLED", "false").lower() == "true"
+
+# Internationalization (i18n)
+LANGUAGE = os.getenv("LANGUAGE", "es")  # Default: Spanish

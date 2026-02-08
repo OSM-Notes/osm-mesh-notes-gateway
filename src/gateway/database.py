@@ -6,8 +6,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+import pytz
 
-from .config import DB_PATH, DEDUP_LOCATION_PRECISION, DEDUP_TIME_BUCKET_SECONDS, OSM_MAX_RETRIES
+from .config import DB_PATH, DEDUP_LOCATION_PRECISION, DEDUP_TIME_BUCKET_SECONDS, OSM_MAX_RETRIES, TZ
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,20 @@ class Database:
                     lon REAL NOT NULL,
                     received_at REAL NOT NULL,
                     seen_count INTEGER DEFAULT 1,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    node_id TEXT PRIMARY KEY,
+                    language TEXT DEFAULT 'es',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS system_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -239,8 +254,19 @@ class Database:
             """, (local_queue_id,))
             conn.commit()
 
-    def get_node_stats(self, node_id: str) -> Dict[str, Any]:
-        """Get statistics for a node."""
+    def get_node_stats(self, node_id: str, timezone: Optional[str] = None) -> Dict[str, Any]:
+        """Get statistics for a node.
+        
+        Args:
+            node_id: Node identifier
+            timezone: Timezone name (e.g., 'America/Bogota'). If None, uses TZ from config.
+        
+        Returns:
+            Dictionary with 'total', 'today', 'queue', and 'timezone' keys.
+        """
+        if timezone is None:
+            timezone = TZ
+        
         with self._get_connection() as conn:
             # Total count
             cursor = conn.execute("""
@@ -248,12 +274,39 @@ class Database:
             """, (node_id,))
             total = cursor.fetchone()["total"]
 
-            # Today count
+            # Today count (using server timezone)
+            # Notes are stored in UTC, so we need to convert to server timezone
+            tz = pytz.timezone(timezone)
+            now_local = datetime.now(tz)
+            today_local = now_local.strftime("%Y-%m-%d")
+            
+            # Get all notes for this node and filter by date in server timezone
             cursor = conn.execute("""
-                SELECT COUNT(*) as today FROM notes
-                WHERE node_id = ? AND DATE(created_at) = DATE('now')
+                SELECT created_at FROM notes WHERE node_id = ?
             """, (node_id,))
-            today = cursor.fetchone()["today"]
+            notes = cursor.fetchall()
+            
+            today_count = 0
+            for note_row in notes:
+                # Parse UTC datetime from database
+                # SQLite stores datetime as string, format: 'YYYY-MM-DD HH:MM:SS.ffffff'
+                created_str = note_row["created_at"]
+                try:
+                    # Try parsing with timezone info first
+                    if 'Z' in created_str or '+' in created_str or created_str.endswith('UTC'):
+                        created_utc = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
+                    else:
+                        # No timezone info, assume UTC (as stored by datetime.utcnow())
+                        created_utc = datetime.fromisoformat(created_str)
+                        created_utc = pytz.UTC.localize(created_utc)
+                    
+                    # Convert to server timezone
+                    created_local = created_utc.astimezone(tz)
+                    if created_local.strftime("%Y-%m-%d") == today_local:
+                        today_count += 1
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Error parsing date {created_str}: {e}")
+                    continue
 
             # Queue size
             cursor = conn.execute("""
@@ -264,8 +317,9 @@ class Database:
 
             return {
                 "total": total,
-                "today": today,
+                "today": today_count,
                 "queue": queue,
+                "timezone": timezone,
             }
 
     def get_node_notes(
@@ -403,3 +457,50 @@ class Database:
             deleted = conn.total_changes
             if deleted > 0:
                 logger.debug(f"Cleaned up {deleted} old positions from cache")
+
+    def get_user_language(self, node_id: str) -> str:
+        """Get user's preferred language (default: 'es')."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT language FROM user_preferences
+                WHERE node_id = ?
+            """, (node_id,))
+            row = cursor.fetchone()
+            return row["language"] if row else "es"
+
+    def set_user_language(self, node_id: str, language: str) -> bool:
+        """Set user's preferred language. Returns True if successful."""
+        if language not in ["es", "en"]:
+            return False
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO user_preferences (node_id, language, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(node_id) DO UPDATE SET
+                    language = excluded.language,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (node_id, language))
+            conn.commit()
+            return True
+
+    def get_last_broadcast_date(self) -> Optional[str]:
+        """Get the date of the last broadcast (YYYY-MM-DD format)."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT value FROM system_state
+                WHERE key = 'last_broadcast_date'
+            """)
+            row = cursor.fetchone()
+            return row["value"] if row else None
+
+    def set_last_broadcast_date(self, date: str):
+        """Set the date of the last broadcast (YYYY-MM-DD format)."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO system_state (key, value, updated_at)
+                VALUES ('last_broadcast_date', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (date,))
+            conn.commit()

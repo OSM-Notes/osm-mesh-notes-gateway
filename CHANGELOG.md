@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-02-08
+
+### Fixed
+- **Critical**: Resolved `UnboundLocalError: cannot access local variable 'lat'` in `_handle_osmnote` method. The error occurred when GPS validation was enabled because `lat` and `lon` variables were only defined in certain code paths. Fixed by using `position.lat` and `position.lon` directly instead of intermediate variables.
+- Fixed `MSG_ACK_SUCCESS() got an unexpected keyword argument 'locale'` error. Added `locale` parameter support to `MSG_ACK_SUCCESS` function to properly handle internationalization.
+- Fixed "Data payload too big" errors when sending acknowledgment messages. Long confirmation messages are now automatically split into multiple parts using the existing `split_long_message` function, with appropriate delays between parts.
+
+### Changed
+- **User Experience**: Privacy warning message ("⚠️ No envíes datos personales ni emergencias de cualquier tipo") now appears only every 5 notes per user instead of in every message, reducing message repetition while still maintaining periodic reminders. The warning still appears in all error/rejection messages as they are less frequent.
+- Modified `MSG_ACK_SUCCESS`, `MSG_ACK_QUEUED`, and `MSG_DUPLICATE` functions to accept an optional `show_warning` parameter (default: `True`) to control when the privacy warning is displayed.
+- Updated `NotificationManager.send_ack` to calculate whether to show the warning based on the user's total note count (shows on notes 5, 10, 15, 20, etc.).
+
+### Technical Details
+- Improved error handling in `meshtastic_serial.py` with full traceback logging for better debugging.
+- Enhanced message splitting logic to handle acknowledgment messages that exceed Meshtastic's payload size limits (233 bytes).
+- Added anti-spam checks before sending multi-part acknowledgment messages to prevent notification flooding.
+
 ## [0.1.0] - 2026-02-03
 
 ### Added

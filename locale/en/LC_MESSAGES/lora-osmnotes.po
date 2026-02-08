@@ -1,0 +1,322 @@
+# English translations for lora-osmnotes
+# Copyright (C) 2026
+# This file is distributed under the same license as the lora-osmnotes package.
+msgid ""
+msgstr ""
+"Project-Id-Version: lora-osmnotes 1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-02-07 22:00+0000\n"
+"PO-Revision-Date: 2026-02-07 22:00+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "❌ Falta el texto del reporte.\n"
+msgstr "❌ Missing report text.\n"
+
+msgid "Usa: #osmnote <tu mensaje>\n"
+msgstr "Use: #osmnote <your message>\n"
+
+msgid "⚠️ No envíes datos personales ni emergencias de cualquier tipo."
+msgstr "⚠️ Do not send personal data or emergencies of any kind."
+
+msgid "✅ Reporte recibido y nota creada en OSM.\n"
+msgstr "✅ Report received and note created in OSM.\n"
+
+msgid "📝 Nota: #{id}\n"
+msgstr "📝 Note: #{id}\n"
+
+msgid "✅ Reporte recibido. Quedó en cola para enviar cuando haya Internet.\n"
+msgstr "✅ Report received. Queued to send when Internet is available.\n"
+
+msgid "📦 En cola: {queue_id}\n"
+msgstr "📦 Queued: {queue_id}\n"
+
+msgid "❌ Reporte recibido, pero no hay GPS reciente del dispositivo.\n"
+msgstr "❌ Report received, but no recent GPS from device.\n"
+
+msgid "Mantén el T‑Echo encendido al aire libre 30–60 s y reenvía.\n"
+msgstr "Keep T‑Echo powered on outdoors for 30–60s and resend.\n"
+
+msgid "❌ El dispositivo se prendió hace poco, por lo que la posición no es precisa.\n"
+msgstr "❌ Device was recently started, so position is not accurate.\n"
+
+msgid "Espera {wait_time} segundos más para que el GPS se estabilice y reenvía.\n"
+msgstr "Wait {wait_time} more seconds for GPS to stabilize and resend.\n"
+
+msgid "❌ Las coordenadas GPS recibidas son inválidas.\n"
+msgstr "❌ Received GPS coordinates are invalid.\n"
+
+msgid "Verifica que el GPS esté funcionando correctamente.\n"
+msgstr "Verify that GPS is working correctly.\n"
+
+msgid "❌ El mensaje es demasiado largo (máximo {max_len} caracteres).\n"
+msgstr "❌ Message is too long (maximum {max_len} characters).\n"
+
+msgid "Acorta el mensaje y reenvía.\n"
+msgstr "Shorten the message and resend.\n"
+
+msgid "❌ Reporte recibido, pero la última posición es muy vieja (>2 min).\n"
+msgstr "❌ Report received, but last position is too old (>2 min).\n"
+
+msgid "Espera a que el GPS se actualice y reenvía.\n"
+msgstr "Wait for GPS to update and resend.\n"
+
+msgid "✅ Reporte recibido (ya estaba registrado).\n"
+msgstr "✅ Report received (already registered).\n"
+
+msgid "ℹ️ Comandos disponibles:\n\n"
+msgstr "ℹ️ Available commands:\n\n"
+
+msgid "• #osmnote <mensaje> - Crear nota OSM\n"
+msgstr "• #osmnote <message> - Create OSM note\n"
+
+msgid "• #osmstatus - Ver estado del gateway\n"
+msgstr "• #osmstatus - View gateway status\n"
+
+msgid "• #osmcount - Ver conteo de notas\n"
+msgstr "• #osmcount - View note count\n"
+
+msgid "• #osmlist [n] - Listar últimas notas\n"
+msgstr "• #osmlist [n] - List latest notes\n"
+
+msgid "• #osmqueue - Ver tamaño de cola\n"
+msgstr "• #osmqueue - View queue size\n"
+
+msgid "• #osmhelp - Esta ayuda\n"
+msgstr "• #osmhelp - This help\n"
+
+msgid "• #osmmorehelp - Ayuda extendida con detalles\n\n"
+msgstr "• #osmmorehelp - Extended help with details\n\n"
+
+msgid "💡 Consejo: Configura #osmnote en Quick Chat.\n"
+msgstr "💡 Tip: Configure #osmnote in Quick Chat.\n"
+
+msgid "Mensajes → menú (3 puntos) → Quick Chat → #osmnote\n"
+msgstr "Messages → menu (3 dots) → Quick Chat → #osmnote\n"
+
+msgid "Desactiva 'Instantly send' para que quede 'Append to message'.\n\n"
+msgstr "Disable 'Instantly send' so it becomes 'Append to message'.\n\n"
+
+msgid "📱 Configuración recomendada para dispositivos móviles:\n"
+msgstr "📱 Recommended configuration for mobile devices:\n"
+
+msgid "Position Broadcast: 60s | Smart Broadcast: 15s/100m | GPS Update: 120s\n"
+msgstr "Position Broadcast: 60s | Smart Broadcast: 15s/100m | GPS Update: 120s\n"
+
+msgid "Role: CLIENT (para reenviar mensajes #osmXXX)\n\n"
+msgstr "Role: CLIENT (to forward #osmXXX messages)\n\n"
+
+msgid "ℹ️ Información detallada:\n\n"
+msgstr "ℹ️ Detailed information:\n\n"
+
+msgid "📝 #osmnote <mensaje>\n"
+msgstr "📝 #osmnote <message>\n"
+
+msgid "Crea una nota en OpenStreetMap con tu ubicación GPS.\n"
+msgstr "Create a note in OpenStreetMap with your GPS location.\n"
+
+msgid "El mensaje debe tener máximo 200 caracteres.\n"
+msgstr "Message must have maximum 200 characters.\n"
+
+msgid "Requiere GPS activo y posición reciente (<2 min).\n\n"
+msgstr "Requires active GPS and recent position (<2 min).\n\n"
+
+msgid "📊 #osmstatus\n"
+msgstr "📊 #osmstatus\n"
+
+msgid "Muestra el estado del gateway:\n"
+msgstr "Shows gateway status:\n"
+
+msgid "• Si hay conexión a Internet\n"
+msgstr "• If there is Internet connection\n"
+
+msgid "• Tamaño de la cola total\n"
+msgstr "• Total queue size\n"
+
+msgid "• Tamaño de tu cola personal\n\n"
+msgstr "• Your personal queue size\n\n"
+
+msgid "📈 #osmcount\n"
+msgstr "📈 #osmcount\n"
+
+msgid "Muestra cuántas notas has creado:\n"
+msgstr "Shows how many notes you have created:\n"
+
+msgid "• Notas creadas hoy\n"
+msgstr "• Notes created today\n"
+
+msgid "• Total de notas creadas\n\n"
+msgstr "• Total notes created\n\n"
+
+msgid "📋 #osmlist [n]\n"
+msgstr "📋 #osmlist [n]\n"
+
+msgid "Lista tus últimas notas creadas.\n"
+msgstr "Lists your latest created notes.\n"
+
+msgid "• Sin número: muestra las últimas 5\n"
+msgstr "• Without number: shows last 5\n"
+
+msgid "• Con número: muestra las últimas n (máximo 20)\n"
+msgstr "• With number: shows last n (maximum 20)\n"
+
+msgid "• Ejemplo: #osmlist 10\n"
+msgstr "• Example: #osmlist 10\n"
+
+msgid "• Muestra notas pendientes y enviadas\n\n"
+msgstr "• Shows pending and sent notes\n\n"
+
+msgid "📦 #osmqueue\n"
+msgstr "📦 #osmqueue\n"
+
+msgid "Muestra el tamaño de las colas:\n"
+msgstr "Shows queue sizes:\n"
+
+msgid "• Cola total del gateway\n"
+msgstr "• Gateway total queue\n"
+
+msgid "• Tu cola personal\n\n"
+msgstr "• Your personal queue\n\n"
+
+msgid "💡 Quick Chat (para facilitar #osmnote desde la app):\n"
+msgstr "💡 Quick Chat (to facilitate #osmnote from the app):\n"
+
+msgid "1. Abre la pantalla de mensajes (Conversations)\n"
+msgstr "1. Open the messages screen (Conversations)\n"
+
+msgid "2. Toca el menú (3 puntos) arriba a la derecha\n"
+msgstr "2. Tap the menu (3 dots) at the top right\n"
+
+msgid "3. Selecciona 'Quick Chat'\n"
+msgstr "3. Select 'Quick Chat'\n"
+
+msgid "4. Agrega: #osmnote\n"
+msgstr "4. Add: #osmnote\n"
+
+msgid "5. Desactiva 'Instantly send' para que quede 'Append to message'\n"
+msgstr "5. Disable 'Instantly send' so it becomes 'Append to message'\n"
+
+msgid "6. Luego selecciona #osmnote y escribe tu reporte\n\n"
+msgstr "6. Then select #osmnote and write your report\n\n"
+
+msgid "Esto evita errores al escribir el hashtag.\n\n"
+msgstr "This avoids errors when writing the hashtag.\n\n"
+
+msgid "📡 Configuración de Role (para reenvío de mensajes):\n"
+msgstr "📡 Role Configuration (for message forwarding):\n"
+
+msgid "Para que los mensajes #osmXXX lleguen al gateway:\n"
+msgstr "For #osmXXX messages to reach the gateway:\n"
+
+msgid "• Dispositivos móviles: Role = CLIENT\n"
+msgstr "• Mobile devices: Role = CLIENT\n"
+
+msgid "• Nota: CLIENT_MUTE no reenvía mensajes\n\n"
+msgstr "• Note: CLIENT_MUTE does not forward messages\n\n"
+
+msgid "• Esto permite que el dispositivo reenvíe mensajes\n"
+msgstr "• This allows the device to forward messages\n"
+
+msgid "• Configuración: Settings → Device → Role → CLIENT\n"
+msgstr "• Configuration: Settings → Device → Role → CLIENT\n"
+
+msgid "✅ Enviado desde cola: {queue_id} → Nota OSM #{note_id}\n"
+msgstr "✅ Sent from queue: {queue_id} → OSM Note #{note_id}\n"
+
+msgid "ℹ️ Gateway de notas OSM activo.\n"
+msgstr "ℹ️ OSM notes gateway active.\n"
+
+msgid "Usa:\n"
+msgstr "Use:\n"
+
+msgid "ℹ️ Gateway activo\n"
+msgstr "ℹ️ Gateway active\n"
+
+msgid "Internet: {status}\n"
+msgstr "Internet: {status}\n"
+
+msgid "Cola total: {total}\n"
+msgstr "Total queue: {total}\n"
+
+msgid "Tu cola: {queue}"
+msgstr "Your queue: {queue}"
+
+msgid "📊 Notas creadas:\n"
+msgstr "📊 Notes created:\n"
+
+msgid "Hoy: {today}\n"
+msgstr "Today: {today}\n"
+
+msgid "Total: {total}\n"
+msgstr "Total: {total}\n"
+
+msgid "Zona horaria: {tz}"
+msgstr "Timezone: {tz}"
+
+msgid "📝 No hay notas registradas."
+msgstr "📝 No registered notes."
+
+msgid "📝 Últimas {count} notas:"
+msgstr "📝 Latest {count} notes:"
+
+msgid "📦 Cola:\n"
+msgstr "📦 Queue:\n"
+
+msgid "❌ Error al crear nota."
+msgstr "❌ Error creating note."
+
+msgid "❌ Límite de mensajes alcanzado.\n"
+msgstr "❌ Message limit reached.\n"
+
+msgid "Espera {time} segundos antes de enviar otro mensaje.\n"
+msgstr "Wait {time} seconds before sending another message.\n"
+
+msgid "❌ {count} reporte(s) fallaron después de múltiples intentos.\n"
+msgstr "❌ {count} report(s) failed after multiple attempts.\n"
+
+msgid "Error: {error}\n"
+msgstr "Error: {error}\n"
+
+msgid "Usa #osmlist para ver detalles.\n"
+msgstr "Use #osmlist to see details.\n"
+
+msgid "✅ Se enviaron {count} reportes en cola. "
+msgstr "✅ {count} queued reports sent. "
+
+msgid "Usa #osmlist para ver detalles."
+msgstr "Use #osmlist to see details."
+
+msgid "📍 Ubicación: {address}\n"
+msgstr "📍 Location: {address}\n"
+
+msgid "Error desconocido"
+msgstr "Unknown error"
+
+msgid "✅ Idioma cambiado a {lang} / Language changed to {lang}"
+msgstr "✅ Language changed to {lang}"
+
+msgid "❌ Error al cambiar idioma / Error changing language"
+msgstr "❌ Error changing language"
+
+msgid "❌ Idioma inválido. Usa: #osmlang es o #osmlang en\nInvalid language. Use: #osmlang es or #osmlang en"
+msgstr "❌ Invalid language. Use: #osmlang es or #osmlang en"
+
+msgid "🌐 Idioma actual / Current language: {lang}"
+msgstr "🌐 Current language: {lang}"
+
+msgid "• #osmlang [es|en] - Cambiar idioma / Change language\n"
+msgstr "• #osmlang [es|en] - Change language\n"
+
+msgid "🌐 #osmlang [es|en]\n"
+msgstr "🌐 #osmlang [es|en]\n"
+
+msgid "Cambia el idioma de los mensajes.\n"
+msgstr "Changes the language of messages.\n"
+
+msgid "• Sin parámetro: muestra idioma actual\n"
+msgstr "• Without parameter: shows current language\n"
+
+msgid "• Con parámetro: cambia idioma (es=Español, en=English)\n\n"
+msgstr "• With parameter: changes language (es=Spanish, en=English)\n\n"

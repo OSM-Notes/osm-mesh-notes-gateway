@@ -18,6 +18,7 @@ from .database import Database
 from .position_cache import PositionCache
 from .meshtastic_serial import MeshtasticSerial
 from .commands import CommandProcessor, MSG_DAILY_BROADCAST
+from .i18n import _
 from .osm_worker import OSMWorker
 from .notifications import NotificationManager
 
@@ -73,9 +74,9 @@ class Gateway:
 
         # Worker thread
         self.worker_thread: Optional[threading.Thread] = None
-
-        # Daily broadcast tracking
-        self.last_broadcast: Optional[datetime] = None
+        
+        # Track if this is the first worker cycle (to skip broadcast on startup)
+        self._first_worker_cycle = True
 
         # Signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -119,7 +120,7 @@ class Gateway:
         if command_type == "ignore":
             return
 
-        if command_type in ["osmhelp", "osmmorehelp", "osmstatus", "osmcount", "osmlist", "osmqueue"]:
+        if command_type in ["osmhelp", "osmmorehelp", "osmstatus", "osmcount", "osmlist", "osmqueue", "osmlang"]:
             if response:
                 self.notifications.send_command_response(node_id, response)
 
@@ -198,9 +199,12 @@ class Gateway:
                 # Process failed notifications
                 self.notifications.process_failed_notifications()
 
-                # Daily broadcast (optional)
-                if DAILY_BROADCAST_ENABLED:
+                # Daily broadcast (optional) - skip on first cycle to avoid spam on restart
+                if DAILY_BROADCAST_ENABLED and not self._first_worker_cycle:
                     self._check_daily_broadcast()
+                
+                # Mark that we've completed the first cycle
+                self._first_worker_cycle = False
 
             except Exception as e:
                 logger.error(f"Error in worker loop: {e}")
@@ -211,16 +215,25 @@ class Gateway:
         logger.info("Worker thread stopped")
 
     def _check_daily_broadcast(self):
-        """Check if daily broadcast should be sent."""
+        """Check if daily broadcast should be sent (once per calendar day, persisted across restarts)."""
         now = datetime.now()
-        if self.last_broadcast is None or (now - self.last_broadcast) >= timedelta(hours=24):
-            # MSG_DAILY_BROADCAST is a tuple, join it to string
-            broadcast_msg = "".join(MSG_DAILY_BROADCAST) if isinstance(MSG_DAILY_BROADCAST, tuple) else MSG_DAILY_BROADCAST
-            if self.serial.send_broadcast(broadcast_msg):
-                self.last_broadcast = now
-                logger.info("Sent daily broadcast")
-            else:
-                logger.warning("Failed to send daily broadcast (send_broadcast returned False)")
+        today_str = now.strftime("%Y-%m-%d")
+        
+        # Check if we already sent a broadcast today
+        last_broadcast_date = self.db.get_last_broadcast_date()
+        if last_broadcast_date == today_str:
+            logger.debug(f"Daily broadcast already sent today ({today_str}), skipping")
+            return
+        
+        # Send broadcast
+        from .i18n import get_current_locale
+        broadcast_msg = MSG_DAILY_BROADCAST(get_current_locale())
+        if self.serial.send_broadcast(broadcast_msg):
+            # Save today's date to database
+            self.db.set_last_broadcast_date(today_str)
+            logger.info(f"Sent daily broadcast for {today_str}")
+        else:
+            logger.warning("Failed to send daily broadcast (send_broadcast returned False)")
 
     def start(self):
         """Start the gateway."""

@@ -129,8 +129,8 @@ def test_osmmorehelp(processor):
     cmd_type, response = processor.process_message("test_node", "#osmmorehelp")
     assert cmd_type == "osmmorehelp"
     assert response is not None
-    assert "Canned Messages" in response or "mensajes predefinidos" in response
-    assert "Para crear una nota" in response
+    assert "Quick Chat" in response or "quick chat" in response.lower()
+    assert "Para crear una nota" in response or "Crea una nota" in response
 
 
 def test_osmstatus(processor):
