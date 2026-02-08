@@ -1,11 +1,16 @@
-"""Meshtastic serial communication."""
+"""Meshtastic serial communication using meshtastic-python library."""
 
-import serial
 import logging
 import time
 import threading
 from typing import Optional, Callable, Dict, Any
-from queue import Queue
+
+try:
+    import meshtastic.serial_interface
+    import meshtastic.tunnel_interface
+    MESHTASTIC_AVAILABLE = True
+except ImportError:
+    MESHTASTIC_AVAILABLE = False
 
 from .config import SERIAL_PORT
 
@@ -14,78 +19,87 @@ logger = logging.getLogger(__name__)
 
 class MeshtasticSerial:
     """
-    Meshtastic serial connection with auto-reconnect.
+    Meshtastic serial connection using meshtastic-python library.
     
-    Manages USB serial communication with Meshtastic devices. Handles
-    connection, reconnection, message parsing, and sending DMs/broadcasts.
+    Manages USB serial communication with Meshtastic devices using the
+    official meshtastic-python library. Handles connection, reconnection,
+    message parsing (protobuf), and sending DMs/broadcasts.
     
     Attributes:
-        port: Serial port path (e.g., "/dev/ttyACM0")
-        baudrate: Serial baudrate (default: 9600)
-        timeout: Read timeout in seconds
-        serial_conn: pyserial Serial object (None if not connected)
+        port: Serial port path (e.g., "/dev/ttyUSB0")
+        interface: meshtastic SerialInterface object
         running: Flag indicating if reader thread is running
         message_callback: Callback function for incoming messages
+        position_cache: Cache for node positions (node_id -> (lat, lon, timestamp))
         
     Note:
-        Uses a separate thread for reading messages. Supports auto-reconnect
-        on connection loss. Message format is simplified for MVP (JSON or
-        pipe-separated text).
+        Uses meshtastic-python library to parse protobuf packets and handle
+        real Meshtastic protocol communication.
     """
 
     def __init__(
         self,
         port: str = SERIAL_PORT,
-        baudrate: int = 9600,
-        timeout: float = 1.0,
+        baudrate: int = 9600,  # Not used with meshtastic library, kept for compatibility
+        timeout: float = 1.0,  # Not used with meshtastic library, kept for compatibility
     ):
+        if not MESHTASTIC_AVAILABLE:
+            raise ImportError(
+                "meshtastic library not available. Install with: pip install meshtastic"
+            )
+
         self.port = port
-        self.baudrate = baudrate
-        self.timeout = timeout
-        self.serial_conn: Optional[serial.Serial] = None
+        self.interface: Optional[meshtastic.serial_interface.SerialInterface] = None
         self.running = False
         self.reconnect_delay = 5.0
         self.message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
-        self.read_thread: Optional[threading.Thread] = None
-        self.write_queue: Queue = Queue()
+        self.position_cache: Dict[str, Dict[str, Any]] = {}  # node_id -> {lat, lon, timestamp}
+        self._lock = threading.Lock()
 
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]):
         """Set callback for incoming messages."""
         self.message_callback = callback
 
     def connect(self) -> bool:
-        """Connect to serial port."""
+        """Connect to Meshtastic device."""
         try:
-            if self.serial_conn and self.serial_conn.is_open:
-                return True
+            if self.interface:
+                # Check if still connected
+                try:
+                    # Try to get node info to verify connection
+                    _ = self.interface.getMyNodeInfo()
+                    return True
+                except Exception:
+                    # Connection lost, need to reconnect
+                    self.interface = None
 
-            logger.info(f"Connecting to {self.port} at {self.baudrate} baud...")
-            self.serial_conn = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=self.timeout,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
+            logger.info(f"Connecting to Meshtastic device at {self.port}...")
+            self.interface = meshtastic.serial_interface.SerialInterface(
+                devPath=self.port,
+                noProto=False,
+                connectNow=True,
             )
-            logger.info(f"Connected to {self.port}")
+            logger.info(f"Connected to Meshtastic device at {self.port}")
             return True
-        except serial.SerialException as e:
-            logger.error(f"Failed to connect to {self.port}: {e}")
-            return False
         except Exception as e:
-            logger.error(f"Unexpected error connecting: {e}")
+            logger.error(f"Failed to connect to {self.port}: {e}")
+            self.interface = None
             return False
 
     def disconnect(self):
-        """Disconnect from serial port."""
+        """Disconnect from Meshtastic device."""
         self.running = False
-        if self.serial_conn and self.serial_conn.is_open:
-            self.serial_conn.close()
-            logger.info("Disconnected from serial port")
+        if self.interface:
+            try:
+                self.interface.close()
+                logger.info("Disconnected from Meshtastic device")
+            except Exception as e:
+                logger.debug(f"Error closing interface: {e}")
+            finally:
+                self.interface = None
 
     def start(self):
-        """Start reading thread."""
+        """Start message listener."""
         if self.running:
             return
 
@@ -94,134 +108,183 @@ class MeshtasticSerial:
             return
 
         self.running = True
-        self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
-        self.read_thread.start()
+
+        # Subscribe to receive messages
+        self.interface.subscribe(self._on_receive)
+
         logger.info("Meshtastic serial reader started")
 
     def stop(self):
-        """Stop reading thread."""
+        """Stop message listener."""
         self.running = False
-        if self.read_thread:
-            self.read_thread.join(timeout=2.0)
         self.disconnect()
 
-    def _read_loop(self):
-        """Main read loop with auto-reconnect."""
-        buffer = b""
-        while self.running:
-            try:
-                if not self.serial_conn or not self.serial_conn.is_open:
-                    if not self.connect():
-                        time.sleep(self.reconnect_delay)
-                        continue
+    def _on_receive(self, packet, interface):
+        """Handle received packet from Meshtastic."""
+        if not self.running or not self.message_callback:
+            return
 
-                # Read available data
-                if self.serial_conn.in_waiting > 0:
-                    data = self.serial_conn.read(self.serial_conn.in_waiting)
-                    buffer += data
-
-                    # Try to parse messages (simplified - Meshtastic uses protobuf)
-                    # For MVP, we'll parse text-based messages
-                    while b"\n" in buffer:
-                        line, buffer = buffer.split(b"\n", 1)
-                        line = line.strip()
-                        if line:
-                            self._parse_message(line)
-
-                time.sleep(0.1)  # Small delay to avoid busy waiting
-
-            except serial.SerialException as e:
-                logger.error(f"Serial error: {e}, reconnecting...")
-                if self.serial_conn:
-                    try:
-                        self.serial_conn.close()
-                    except:
-                        pass
-                self.serial_conn = None
-                time.sleep(self.reconnect_delay)
-
-            except Exception as e:
-                logger.error(f"Unexpected error in read loop: {e}")
-                time.sleep(1.0)
-
-    def _parse_message(self, data: bytes):
-        """Parse incoming message (simplified parser for MVP).
-        
-        Expected formats:
-        1. JSON: {"from": "node_id", "lat": 1.23, "lon": 4.56, "text": "message"}
-        2. Pipe-separated: "node_id|lat|lon|message" or "node_id|||message"
-        
-        Note: In production, Meshtastic uses protobuf packets. This MVP uses
-        a simplified text-based protocol. For full Meshtastic integration,
-        use the meshtastic-python library to parse protobuf packets.
-        """
         try:
-            # For MVP, we'll use a simple text-based protocol
-            # In production, this would parse Meshtastic protobuf packets
-            text = data.decode("utf-8", errors="ignore")
-            
-            # Simple format: "NODE_ID|LAT|LON|MESSAGE" or "NODE_ID|||MESSAGE"
-            # Or JSON-like: {"from": "node_id", "lat": 1.23, "lon": 4.56, "text": "message"}
-            if text.startswith("{"):
-                import json
-                msg = json.loads(text)
-                node_id = str(msg.get("from", ""))
-                lat = msg.get("lat")
-                lon = msg.get("lon")
-                message_text = msg.get("text", "")
-            else:
-                # Fallback: pipe-separated format
-                parts = text.split("|", 3)
-                if len(parts) >= 2:
-                    node_id = parts[0]
-                    try:
-                        lat = float(parts[1]) if parts[1] else None
-                        lon = float(parts[2]) if len(parts) > 2 and parts[2] else None
-                    except ValueError:
-                        lat = None
-                        lon = None
-                    message_text = parts[3] if len(parts) > 3 else ""
-                else:
+            # Extract message data
+            decoded = packet.get("decoded", {})
+            portnum = decoded.get("portnum")
+
+            # Handle text messages (portnum can be string "TEXT_MESSAGE_APP" or number)
+            if portnum == "TEXT_MESSAGE_APP" or (isinstance(portnum, int) and portnum == 1):
+                text = decoded.get("text", "")
+                from_node = packet.get("from")
+                
+                if not from_node or not text:
                     return
 
-            if self.message_callback:
+                # Convert node number to string format (Meshtastic uses 8-char hex)
+                if isinstance(from_node, int):
+                    # Format as !12345678 (8 hex chars, lowercase)
+                    node_id = f"!{from_node:08x}"
+                else:
+                    node_id = str(from_node)
+                    # Ensure it starts with ! if it's a hex string
+                    if not node_id.startswith("!") and len(node_id) > 0:
+                        node_id = f"!{node_id}"
+
+                # Get position from cache if available
+                position = self.position_cache.get(node_id, {})
+                lat = position.get("lat")
+                lon = position.get("lon")
+
+                logger.info(f"Received message from {node_id}: {text[:50]}...")
+
+                # Call callback with message data
                 self.message_callback({
                     "node_id": node_id,
                     "lat": lat,
                     "lon": lon,
-                    "text": message_text,
+                    "text": text,
                     "timestamp": time.time(),
                 })
 
+            # Handle position updates (portnum can be string "POSITION_APP" or number)
+            elif portnum == "POSITION_APP" or (isinstance(portnum, int) and portnum == 3):
+                from_node = packet.get("from")
+                position_data = decoded.get("position", {})
+                
+                if from_node and position_data:
+                    if isinstance(from_node, int):
+                        node_id = f"!{from_node:08x}"
+                    else:
+                        node_id = str(from_node)
+                        if not node_id.startswith("!") and len(node_id) > 0:
+                            node_id = f"!{node_id}"
+                    
+                    # Extract position (Meshtastic uses integer coordinates)
+                    lat_i = position_data.get("latitudeI")
+                    lon_i = position_data.get("longitudeI")
+                    
+                    if lat_i is not None and lon_i is not None:
+                        # Convert from integer (1e-7 degrees) to float
+                        lat = lat_i / 1e7
+                        lon = lon_i / 1e7
+                        
+                        # Update position cache
+                        with self._lock:
+                            self.position_cache[node_id] = {
+                                "lat": lat,
+                                "lon": lon,
+                                "timestamp": time.time(),
+                            }
+                        
+                        logger.debug(f"Updated position for {node_id}: {lat}, {lon}")
+
+            # Handle telemetry (may contain position) (portnum can be string "TELEMETRY_APP" or number)
+            elif portnum == "TELEMETRY_APP" or (isinstance(portnum, int) and portnum == 67):
+                from_node = packet.get("from")
+                telemetry = decoded.get("telemetry", {})
+                
+                if from_node and telemetry:
+                    if isinstance(from_node, int):
+                        node_id = f"!{from_node:08x}"
+                    else:
+                        node_id = str(from_node)
+                        if not node_id.startswith("!") and len(node_id) > 0:
+                            node_id = f"!{node_id}"
+                    
+                    # Check for position in device metrics
+                    device_metrics = telemetry.get("device")
+                    if device_metrics:
+                        # Telemetry doesn't directly contain position, but we log it
+                        logger.debug(f"Received telemetry from {node_id}")
+
         except Exception as e:
-            logger.debug(f"Failed to parse message: {e}")
+            logger.error(f"Error processing packet: {e}")
 
     def send_dm(self, node_id: str, message: str) -> bool:
         """Send direct message to a node."""
-        if not self.serial_conn or not self.serial_conn.is_open:
-            logger.warning("Serial not connected, cannot send DM")
+        if not self.interface:
+            logger.warning("Interface not connected, cannot send DM")
             return False
 
         try:
-            # Format: DM|NODE_ID|MESSAGE
-            cmd = f"DM|{node_id}|{message}\n"
-            self.serial_conn.write(cmd.encode("utf-8"))
-            logger.info(f"Sent DM to {node_id}: {message[:50]}...")
+            # Convert node_id format if needed
+            # Meshtastic expects node number (int) or node ID string (like "!12345678")
+            node_num = None
+            
+            if node_id.startswith("!"):
+                # Extract node number from ID format "!12345678" or "!9e7878a4"
+                try:
+                    # Try parsing as hex (8 chars) or full hex (16 chars)
+                    hex_part = node_id[1:]
+                    if len(hex_part) == 8:
+                        # Short format: convert to int
+                        node_num = int(hex_part, 16)
+                    elif len(hex_part) == 16:
+                        # Long format: use the last 8 chars or convert full
+                        node_num = int(hex_part[-8:], 16) if len(hex_part) >= 8 else int(hex_part, 16)
+                    else:
+                        node_num = int(hex_part, 16)
+                except ValueError:
+                    # Try to find node in nodes dict by ID string
+                    nodes = self.interface.nodes
+                    if node_id in nodes:
+                        node_num = nodes[node_id].get("num")
+                    else:
+                        logger.error(f"Invalid node_id format: {node_id}")
+                        return False
+            else:
+                # Try as integer directly
+                try:
+                    node_num = int(node_id)
+                except ValueError:
+                    # Try to find in nodes dict
+                    nodes = self.interface.nodes
+                    for nid, node_info in nodes.items():
+                        if nid == node_id or str(node_info.get("num")) == node_id:
+                            node_num = node_info.get("num")
+                            break
+                    if node_num is None:
+                        logger.error(f"Invalid node_id format: {node_id}")
+                        return False
+
+            if node_num is None:
+                logger.error(f"Could not determine node number for {node_id}")
+                return False
+
+            # Send message
+            self.interface.sendText(message, destinationId=node_num, wantAck=False)
+            logger.info(f"Sent DM to {node_id} (node_num={node_num}): {message[:50]}...")
             return True
         except Exception as e:
-            logger.error(f"Failed to send DM: {e}")
+            logger.error(f"Failed to send DM to {node_id}: {e}")
             return False
 
     def send_broadcast(self, message: str) -> bool:
         """Send broadcast message."""
-        if not self.serial_conn or not self.serial_conn.is_open:
-            logger.warning("Serial not connected, cannot send broadcast")
+        if not self.interface:
+            logger.warning("Interface not connected, cannot send broadcast")
             return False
 
         try:
-            # Format: BC|MESSAGE
-            cmd = f"BC|{message}\n"
-            self.serial_conn.write(cmd.encode("utf-8"))
+            # Send broadcast (no destination = broadcast)
+            self.interface.sendText(message, wantAck=False)
             logger.info(f"Sent broadcast: {message[:50]}...")
             return True
         except Exception as e:

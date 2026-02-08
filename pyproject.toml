@@ -12,6 +12,7 @@ dependencies = [
     "protobuf>=4.25.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
+    "meshtastic>=2.0.0",
 ]
 
 [project.optional-dependencies]
