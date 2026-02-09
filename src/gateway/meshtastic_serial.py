@@ -181,6 +181,19 @@ class MeshtasticSerial:
         except Exception as e:
             logger.debug(f"Could not detect device type or configure GPS: {e}")
 
+    def is_connected(self) -> bool:
+        """Check if interface is connected and working."""
+        if not self.interface:
+            return False
+        try:
+            # Try to get node info to verify connection is still alive
+            _ = self.interface.getMyNodeInfo()
+            return True
+        except Exception:
+            # Connection lost
+            self.interface = None
+            return False
+
     def disconnect(self):
         """Disconnect from Meshtastic device."""
         self.running = False
@@ -217,8 +230,16 @@ class MeshtasticSerial:
         self.running = False
         # Unsubscribe from messages
         if pub:
-            pub.unsubscribe(self._on_receive_text, "meshtastic.receive.text")
-            pub.unsubscribe(self._on_receive_position, "meshtastic.receive.position")
+            try:
+                pub.unsubscribe(self._on_receive_text, "meshtastic.receive.text")
+            except Exception as e:
+                # Topic may not exist if subscription never succeeded
+                logger.debug(f"Could not unsubscribe from text topic: {e}")
+            try:
+                pub.unsubscribe(self._on_receive_position, "meshtastic.receive.position")
+            except Exception as e:
+                # Topic may not exist if subscription never succeeded
+                logger.debug(f"Could not unsubscribe from position topic: {e}")
         self.disconnect()
 
     def _on_receive_text(self, packet, interface):
