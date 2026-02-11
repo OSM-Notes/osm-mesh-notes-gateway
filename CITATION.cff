@@ -7,19 +7,21 @@ abstract: "Gateway MVP for converting Meshtastic LoRa mesh messages into OpenStr
 authors:
   - given-names: Andrés
     family-names: Gómez Casanova
-    email: angoca@osm.lat
+    email: andres.gomez@ac3.org.co
     orcid: "https://orcid.org/0009-0003-5016-1881"
     identifiers:
       - type: github
         value: angoca
   - given-names: Doris Carmiña
     family-names: Ruiz Ramírez
+    email: doris.ruiz@ac3.org.co
     orcid: "https://orcid.org/0000-0001-8938-5872"
   - given-names: Angie Lorena
     family-names: Trujillo Guayara
+    email: angie.trujillo@ac3.org.co
   - given-names: Rafael Alberto
     family-names: Isturiz
-    email: risturiz@osm.lat
+    email: rafael.isturiz@ac3.org.co
     identifiers:
       - type: github
         value: risturiz
