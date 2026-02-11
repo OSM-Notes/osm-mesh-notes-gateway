@@ -133,12 +133,14 @@ Desde la app Meshtastic en tu teléfono (conectado por Bluetooth al T-Echo):
 
 Para más información, consulta la documentación técnica:
 
+- **[docs/FIELD_DEPLOYMENT_GUIDE.md](docs/FIELD_DEPLOYMENT_GUIDE.md)** - ⚠️ **Guía de despliegue en terreno** - Checklist y elementos necesarios para desplegar en campo
 - **[docs/spec.md](docs/spec.md)** - Especificación canónica del MVP (fuente de verdad)
 - **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
 - **[docs/message-format.md](docs/message-format.md)** - Formato de mensajes Meshtastic
 - **[docs/API.md](docs/API.md)** - Referencia de API interna
 - **[docs/SECURITY.md](docs/SECURITY.md)** - Guía de seguridad
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Solución de problemas
+- **[docs/TIME_CONFIGURATION.md](docs/TIME_CONFIGURATION.md)** - Configuración de tiempo y sincronización
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
 
 ---
