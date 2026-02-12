@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from gateway.database import Database
 from gateway.main import Gateway
+from gateway.meshtastic_serial import MeshtasticSerial
 
 
 @pytest.fixture
@@ -168,9 +169,12 @@ def test_adjust_pending_notes_timestamps_negative_offset(db):
     assert abs(diff - offset) < 1.0
 
 
+@patch('gateway.main.MeshtasticSerial')
 @patch('gateway.main.subprocess.run')
-def test_is_ntp_synchronized_true(mock_subprocess):
+def test_is_ntp_synchronized_true(mock_subprocess, mock_meshtastic_serial):
     """Test NTP synchronization check when synchronized."""
+    # Mock MeshtasticSerial to avoid import errors
+    mock_meshtastic_serial.return_value = Mock()
     # Mock timedatectl output indicating synchronization
     mock_subprocess.return_value = Mock(
         returncode=0,
@@ -182,9 +186,12 @@ def test_is_ntp_synchronized_true(mock_subprocess):
     mock_subprocess.assert_called_once()
 
 
+@patch('gateway.main.MeshtasticSerial')
 @patch('gateway.main.subprocess.run')
-def test_is_ntp_synchronized_false(mock_subprocess):
+def test_is_ntp_synchronized_false(mock_subprocess, mock_meshtastic_serial):
     """Test NTP synchronization check when not synchronized."""
+    # Mock MeshtasticSerial to avoid import errors
+    mock_meshtastic_serial.return_value = Mock()
     # Mock timedatectl output indicating no synchronization
     mock_subprocess.return_value = Mock(
         returncode=0,
@@ -195,9 +202,12 @@ def test_is_ntp_synchronized_false(mock_subprocess):
     assert gateway._is_ntp_synchronized() is False
 
 
+@patch('gateway.main.MeshtasticSerial')
 @patch('gateway.main.subprocess.run')
-def test_is_ntp_synchronized_error(mock_subprocess):
+def test_is_ntp_synchronized_error(mock_subprocess, mock_meshtastic_serial):
     """Test NTP synchronization check when command fails."""
+    # Mock MeshtasticSerial to avoid import errors
+    mock_meshtastic_serial.return_value = Mock()
     # Mock subprocess error
     mock_subprocess.side_effect = FileNotFoundError("timedatectl not found")
     
@@ -205,46 +215,66 @@ def test_is_ntp_synchronized_error(mock_subprocess):
     assert gateway._is_ntp_synchronized() is False
 
 
+@patch('gateway.main.MeshtasticSerial')
+@patch('gateway.main.PositionCache')
 @patch('gateway.main.Gateway._is_ntp_synchronized')
-def test_check_and_apply_time_correction_not_synchronized(mock_ntp_check):
+def test_check_and_apply_time_correction_not_synchronized(mock_ntp_check, mock_position_cache, mock_meshtastic_serial):
     """Test that correction is not applied when NTP is not synchronized."""
+    # Mock MeshtasticSerial and PositionCache to avoid import errors and initialization issues
+    mock_meshtastic_serial.return_value = Mock()
+    mock_position_cache.return_value = Mock()
     mock_ntp_check.return_value = False
     
     gateway = Gateway()
+    # Ensure flag is False before test
+    gateway.db.set_time_correction_applied(False)
     gateway._check_and_apply_time_correction()
     
     # Should not mark correction as applied
     assert gateway.db.get_time_correction_applied() is False
 
 
+@patch('gateway.main.MeshtasticSerial')
+@patch('gateway.main.PositionCache')
 @patch('gateway.main.Gateway._is_ntp_synchronized')
-@patch('time.time')
-def test_check_and_apply_time_correction_small_offset(mock_time, mock_ntp_check):
+def test_check_and_apply_time_correction_small_offset(mock_ntp_check, mock_position_cache, mock_meshtastic_serial):
     """Test that correction is not applied for small offsets (< 60s)."""
+    # Mock MeshtasticSerial and PositionCache to avoid import errors and initialization issues
+    mock_meshtastic_serial.return_value = Mock()
+    mock_position_cache.return_value = Mock()
     mock_ntp_check.return_value = True
     
-    gateway = Gateway()
-    startup_ts = time.time() - 30  # Only 30 seconds offset
-    gateway.db.set_startup_timestamp(startup_ts)
-    mock_time.return_value = time.time()
+    # Use real time for initialization
+    real_time = time.time()
+    startup_ts = real_time - 30  # Only 30 seconds offset
     
-    gateway._check_and_apply_time_correction()
+    gateway = Gateway()
+    gateway.db.set_startup_timestamp(startup_ts)
+    
+    # Mock time.time() only for the _check_and_apply_time_correction method
+    with patch('gateway.main.time.time', return_value=real_time):
+        gateway._check_and_apply_time_correction()
     
     # Should mark as applied but not actually adjust (small offset)
     assert gateway.db.get_time_correction_applied() is True
 
 
+@patch('gateway.main.MeshtasticSerial')
+@patch('gateway.main.PositionCache')
 @patch('gateway.main.Gateway._is_ntp_synchronized')
-@patch('time.time')
-def test_check_and_apply_time_correction_large_offset(mock_time, mock_ntp_check):
+def test_check_and_apply_time_correction_large_offset(mock_ntp_check, mock_position_cache, mock_meshtastic_serial):
     """Test that correction is applied for large offsets (> 60s)."""
+    # Mock MeshtasticSerial and PositionCache to avoid import errors and initialization issues
+    mock_meshtastic_serial.return_value = Mock()
+    mock_position_cache.return_value = Mock()
     mock_ntp_check.return_value = True
     
+    # Use real time for initialization
+    real_time = time.time()
+    startup_ts = real_time - 7200  # 2 hours offset
+    
     gateway = Gateway()
-    current_time = time.time()
-    startup_ts = current_time - 7200  # 2 hours offset
     gateway.db.set_startup_timestamp(startup_ts)
-    mock_time.return_value = current_time
     
     # Create pending note
     note_id = gateway.db.create_note("node1", 1.0, 2.0, "test", "test")
@@ -254,7 +284,9 @@ def test_check_and_apply_time_correction_large_offset(mock_time, mock_ntp_check)
         cursor = conn.execute("SELECT created_at FROM notes WHERE local_queue_id = ?", (note_id,))
         original_time = cursor.fetchone()["created_at"]
     
-    gateway._check_and_apply_time_correction()
+    # Mock time.time() only for the _check_and_apply_time_correction method
+    with patch('gateway.main.time.time', return_value=real_time):
+        gateway._check_and_apply_time_correction()
     
     # Should mark as applied
     assert gateway.db.get_time_correction_applied() is True
@@ -268,9 +300,14 @@ def test_check_and_apply_time_correction_large_offset(mock_time, mock_ntp_check)
     assert original_time != new_time
 
 
+@patch('gateway.main.MeshtasticSerial')
+@patch('gateway.main.PositionCache')
 @patch('gateway.main.Gateway._is_ntp_synchronized')
-def test_check_and_apply_time_correction_already_applied(mock_ntp_check):
+def test_check_and_apply_time_correction_already_applied(mock_ntp_check, mock_position_cache, mock_meshtastic_serial):
     """Test that correction is not applied twice."""
+    # Mock MeshtasticSerial and PositionCache to avoid import errors and initialization issues
+    mock_meshtastic_serial.return_value = Mock()
+    mock_position_cache.return_value = Mock()
     mock_ntp_check.return_value = True
     
     gateway = Gateway()
@@ -294,17 +331,22 @@ def test_check_and_apply_time_correction_already_applied(mock_ntp_check):
     assert original_time == new_time
 
 
+@patch('gateway.main.MeshtasticSerial')
+@patch('gateway.main.PositionCache')
 @patch('gateway.main.Gateway._is_ntp_synchronized')
-@patch('time.time')
-def test_check_and_apply_time_correction_only_pending(mock_time, mock_ntp_check):
+def test_check_and_apply_time_correction_only_pending(mock_ntp_check, mock_position_cache, mock_meshtastic_serial):
     """Test that only pending notes are adjusted, not sent notes."""
+    # Mock MeshtasticSerial and PositionCache to avoid import errors and initialization issues
+    mock_meshtastic_serial.return_value = Mock()
+    mock_position_cache.return_value = Mock()
     mock_ntp_check.return_value = True
     
+    # Use real time for initialization
+    real_time = time.time()
+    startup_ts = real_time - 7200  # 2 hours offset
+    
     gateway = Gateway()
-    current_time = time.time()
-    startup_ts = current_time - 7200  # 2 hours offset
     gateway.db.set_startup_timestamp(startup_ts)
-    mock_time.return_value = current_time
     
     # Create both pending and sent notes
     pending_id = gateway.db.create_note("node1", 1.0, 2.0, "pending", "pending")
@@ -323,7 +365,9 @@ def test_check_and_apply_time_correction_only_pending(mock_time, mock_ntp_check)
         cursor = conn.execute("SELECT created_at FROM notes WHERE local_queue_id = ?", (sent_id,))
         original_sent_time = cursor.fetchone()["created_at"]
     
-    gateway._check_and_apply_time_correction()
+    # Mock time.time() only for the _check_and_apply_time_correction method
+    with patch('gateway.main.time.time', return_value=real_time):
+        gateway._check_and_apply_time_correction()
     
     # Verify pending note was adjusted
     with gateway.db._get_connection() as conn:
