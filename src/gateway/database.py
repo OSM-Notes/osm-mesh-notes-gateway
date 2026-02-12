@@ -535,7 +535,7 @@ class Database:
                 WHERE key = 'time_correction_applied'
             """)
             row = cursor.fetchone()
-            return row and row["value"] == "true"
+            return bool(row and row["value"] == "true")
 
     def set_time_correction_applied(self, applied: bool = True):
         """Mark that time correction has been applied."""
