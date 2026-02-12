@@ -354,6 +354,7 @@ ping -c 3 api.openstreetmap.org
 
 # Verificar tiempo del sistema
 timedatectl status
+# Para más información sobre configuración de tiempo, ver [TIME_CONFIGURATION.md](TIME_CONFIGURATION.md)
 ```
 
 ---

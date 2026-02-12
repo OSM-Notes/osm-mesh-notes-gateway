@@ -143,6 +143,11 @@ Para más información, consulta la documentación técnica:
 - **[docs/TIME_CONFIGURATION.md](docs/TIME_CONFIGURATION.md)** - Configuración de tiempo y sincronización
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
 
+### Documentación Técnica Avanzada
+
+- **[docs/DEDUP_API_EXTENSIONS.md](docs/DEDUP_API_EXTENSIONS.md)** - Propuesta de API de deduplicación global para múltiples gateways
+- **[docs/OUT_OF_SCOPE_MOBILE_GATEWAY.md](docs/OUT_OF_SCOPE_MOBILE_GATEWAY.md)** - Mejoras futuras fuera del alcance actual (gateways móviles)
+
 ---
 
 ## Privacidad y Alcance
