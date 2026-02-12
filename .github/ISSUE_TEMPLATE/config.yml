@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentación
+    url: https://github.com/OSM-Notes/osm-mesh-notes-gateway/blob/main/README.md
+    about: Consulta la documentación del proyecto
+  - name: 💬 Discusiones
+    url: https://github.com/OSM-Notes/osm-mesh-notes-gateway/discussions
+    about: Preguntas y discusiones generales sobre el proyecto
