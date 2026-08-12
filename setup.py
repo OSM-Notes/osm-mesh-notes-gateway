@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="lora-osm-notes-gateway",
-    version="0.1.0",
+    version="0.2.0",
     description="Gateway Meshtastic USB → OSM Notes for Raspberry Pi",
     packages=find_packages(where="src"),
     package_dir={"": "src"},

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-12
+
 ### Added
 - **Adoption pack**: `docs/ADOPTION.md`, `docs/ROADMAP.md`, `docs/FIELD_CARD.md`, and operational scripts (`health_check`, `mission_report`, `export_notes`, `backup_db`, daily backup timer).
 - **Default LoRa region ANZ**: Colombia (and several LATAM countries per Meshtastic official table); configurable via `LORA_REGION`. Replaces incorrect US915 docs.
@@ -18,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Critical**: Text messages no longer refresh GPS `received_at` in the position cache. Previously, reusing cached coordinates on `#osmnote` reset age to 0 and bypassed `POS_MAX` / `POS_GOOD` validation.
-- **Critical**: Immediate OSM success now sets `notified_sent=1`, preventing a duplicate Q→Note DM from the worker for the same note.
+- **Critical**: Immediate OSM success now sets `notified_sent=1`, preventing a duplicate Q→Note DM for the same note.
 - Fixed `update_note_error` so retry counters are actually persisted in `last_error` (`intento n/N`), enabling failed-send notifications and stopping useless retry loops after max attempts.
 - Fixed missing `locale` parameter in `send_note` method that prevented project attribution from being translated correctly.
 - Fixed "Interface not connected, cannot send broadcast" warning during daily broadcast attempts by checking connection status before sending.

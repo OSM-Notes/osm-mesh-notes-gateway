@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "LoRa Mesh → OSM Notes Gateway"
-version: 0.1.0
-date-released: 2026-02-02
+version: 0.2.0
+date-released: 2026-08-12
 abstract: "Gateway MVP for converting Meshtastic LoRa mesh messages into OpenStreetMap Notes. Designed for Raspberry Pi 3 with Meshtastic Heltec V3 device connected via USB."
 authors:
   - given-names: Andrés
