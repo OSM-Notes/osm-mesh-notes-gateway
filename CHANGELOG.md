@@ -8,16 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Canonical specification**: Rewrote `docs/spec.md` to document implemented behavior (GPS 120s, all commands, Meshtastic protobuf, store-and-forward rules). Added `docs/README.md` documentation index.
 - **New Command**: `#osmnodes` command to list all known nodes in the mesh network, showing node ID, GPS coordinates, time since last seen, and number of times seen. Useful for validating mesh connectivity and device presence.
 - **Project Attribution**: OSM notes now include attribution text ("Created via OSM Mesh Notes Gateway") at the end, translated to the user's current language preference.
 
 ### Fixed
+- **Critical**: Text messages no longer refresh GPS `received_at` in the position cache. Previously, reusing cached coordinates on `#osmnote` reset age to 0 and bypassed `POS_MAX` / `POS_GOOD` validation.
+- **Critical**: Immediate OSM success now sets `notified_sent=1`, preventing a duplicate Q→Note DM from the worker for the same note.
+- Fixed `update_note_error` so retry counters are actually persisted in `last_error` (`intento n/N`), enabling failed-send notifications and stopping useless retry loops after max attempts.
 - Fixed missing `locale` parameter in `send_note` method that prevented project attribution from being translated correctly.
 - Fixed "Interface not connected, cannot send broadcast" warning during daily broadcast attempts by checking connection status before sending.
 - Improved message reception reliability by subscribing to pubsub topics *before* creating the SerialInterface, ensuring all messages are captured.
 - Added fallback subscription to general `meshtastic.receive` topic to catch packets that might not be published to specific topics.
 
 ### Changed
+- Aligned README, architecture, API, and message-format docs with code (`POS_MAX=120s`, real Meshtastic protobuf stack, full command set).
+- `#osmstatus` connectivity check targets OpenStreetMap instead of Google.
 - **Logging Configuration**: Changed default log level from DEBUG to INFO for production use. Meshtastic library logging is now set to WARNING level to reduce verbosity.
 - **Message Delays**: Increased delay between multi-part messages (e.g., `#osmhelp`) from 1 second to 2 seconds to prevent message loss in the mesh network.
 - **Documentation**: Updated `README.md` and help messages (`#osmhelp`, `#osmmorehelp`) to include `#osmnodes` command documentation.

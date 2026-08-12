@@ -8,6 +8,7 @@ import logging
 import threading
 import subprocess
 from datetime import datetime, timedelta
+from typing import Optional
 
 from .config import (
     TZ,
@@ -116,10 +117,10 @@ class Gateway:
 
         logger.info(f"Received message from {node_id}: {text[:50]}...")
 
-        # Only update position cache when position came from a real position packet (cache).
-        # Do not update when from node_info: that data can be old and would wrongly pass age checks.
-        if lat is not None and lon is not None and position_source == "cache":
-            self.position_cache.update(node_id, lat, lon)
+        # Do NOT refresh position cache here. Position age must reflect when the
+        # POSITION packet was received (_on_receive_position), not when a text
+        # message reuses the cached coordinates. Refreshing on text would reset
+        # age to 0 and bypass POS_MAX / POS_GOOD validation.
 
         # Process message
         command_type, response = self.command_processor.process_message(
@@ -196,6 +197,9 @@ class Gateway:
                     osm_note_id=result["id"],
                     osm_note_url=result["url"],
                 )
+                # Immediate success ACK is sent by the caller; mark notified so
+                # the worker does not also send a Q→Note DM for the same note.
+                self.db.mark_notified_sent(note["local_queue_id"])
                 return result
 
             return None
@@ -383,6 +387,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-from typing import Optional

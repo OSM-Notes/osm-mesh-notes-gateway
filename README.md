@@ -44,7 +44,7 @@ El flujo básico es el siguiente:
 
 3. **Gateway**: 
    - Recibe el mensaje por USB desde el dispositivo Meshtastic conectado
-   - Valida que haya GPS reciente (últimos 60 segundos)
+   - Valida que haya GPS reciente (últimos **120 segundos**)
    - Verifica que no sea un duplicado
    - Guarda el reporte en una base de datos local (SQLite)
 
@@ -79,12 +79,16 @@ El flujo básico es el siguiente:
 #osmnote Bache grande en carretera principal. Necesita reparación urgente.
 ```
 
-**Respuesta del gateway**:
+**Respuesta del gateway** (ejemplo si hay Internet):
 ```
-✅ Nota creada: Q-12345
-📍 Ubicación: Barrio Centro
-🌐 Ver en OSM: https://www.openstreetmap.org/note/456789
+✅ Reporte recibido y nota creada en OSM.
+📝 Nota: #456789
+https://www.openstreetmap.org/note/456789
+📍 Ubicación: Barrio Centro, Bogotá, Colombia
+⚠️ No envíes datos personales ni emergencias de cualquier tipo.
 ```
+
+(Si no hay Internet, el ACK indica cola `Q-XXXX` en lugar del ID de nota OSM.)
 
 **📖 Ver más ejemplos y casos de uso reales**: [docs/EXAMPLES.md](docs/EXAMPLES.md)
 
@@ -153,9 +157,9 @@ Desde la app Meshtastic en tu teléfono (conectado por Bluetooth al T-Echo):
 ```
 **Respuesta**:
 ```
-✅ Nota creada: Q-12345
-📍 Ubicación: Barrio Centro
-🌐 Ver en OSM: https://www.openstreetmap.org/note/456789
+✅ Reporte recibido y nota creada en OSM.
+📝 Nota: #456789
+https://www.openstreetmap.org/note/456789
 ```
 
 **Otros comandos útiles**:
@@ -174,15 +178,16 @@ Desde la app Meshtastic en tu teléfono (conectado por Bluetooth al T-Echo):
 
 Para más información, consulta la documentación técnica:
 
-- **[docs/FIELD_DEPLOYMENT_GUIDE.md](docs/FIELD_DEPLOYMENT_GUIDE.md)** - ⚠️ **Guía de despliegue en terreno** - Checklist y elementos necesarios para desplegar en campo
-- **[docs/spec.md](docs/spec.md)** - Especificación canónica del MVP (fuente de verdad)
+- **[docs/README.md](docs/README.md)** - Índice de toda la documentación
+- **[docs/spec.md](docs/spec.md)** - Especificación canónica (fuente de verdad de comportamiento)
+- **[docs/FIELD_DEPLOYMENT_GUIDE.md](docs/FIELD_DEPLOYMENT_GUIDE.md)** - Guía de despliegue en terreno
 - **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
 - **[docs/message-format.md](docs/message-format.md)** - Formato de mensajes Meshtastic
 - **[docs/API.md](docs/API.md)** - Referencia de API interna
 - **[docs/SECURITY.md](docs/SECURITY.md)** - Guía de seguridad
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Solución de problemas
 - **[docs/TIME_CONFIGURATION.md](docs/TIME_CONFIGURATION.md)** - Configuración de tiempo y sincronización
-- **[docs/EXAMPLES.md](docs/EXAMPLES.md)** - 📖 **Ejemplos de uso y casos de uso reales**
+- **[docs/EXAMPLES.md](docs/EXAMPLES.md)** - Ejemplos de uso y casos de uso reales
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Guía para contribuidores
 
 ### Documentación Técnica Avanzada
@@ -220,16 +225,17 @@ Los usuarios pueden enviar comandos desde la app Meshtastic:
 
 | Comando | Descripción |
 |---------|-------------|
-| `#osmnote <mensaje>` | Crea una nota de OSM. Requiere GPS reciente (≤60s) |
+| `#osmnote <mensaje>` | Crea una nota de OSM. Requiere GPS reciente (≤**120s**) |
 | `#osmhelp` | Muestra instrucciones de uso básicas |
 | `#osmmorehelp` | Muestra ayuda adicional detallada |
 | `#osmstatus` | Estado del gateway (activo, Internet, colas) |
 | `#osmcount` | Conteo de notas creadas (hoy + total) |
 | `#osmlist [n]` | Lista últimas `n` notas (default: 5, max: 20) |
 | `#osmqueue` | Tamaño de cola total y del nodo |
-| `#osmnodes` | Lista todos los nodos conocidos en la red mesh |
+| `#osmnodes` | Lista nodos conocidos en la red mesh |
+| `#osmlang [es\|en]` | Ver o cambiar idioma de los mensajes |
 
-Variantes aceptadas para `#osmnote`: `#osm-note`, `#osm_note`
+Variantes aceptadas para `#osmnote`: `#osmnotes`, `#osm-note`, `#osm-notes`, `#osm_note`, `#osm_notes`
 
 ---
 
@@ -413,10 +419,12 @@ Para problemas más complejos o detallados, consulta la **[guía completa de tro
 ### Validación GPS
 
 El sistema valida la posición GPS antes de crear notas:
-- **Sin GPS**: Rechaza si no hay posición en cache
-- **GPS viejo (>60s)**: Rechaza con mensaje de error
-- **GPS aproximado (15-60s)**: Acepta pero marca como "posición aproximada"
+- **Sin GPS**: Rechaza si no hay posición en cache (ni `node_info` usable)
+- **GPS viejo (>120s)**: Rechaza con mensaje de error
+- **GPS aproximado (15–120s)** o solo `node_info`: Acepta pero marca como "posición aproximada"
 - **GPS reciente (≤15s)**: Acepta normalmente
+
+La edad del GPS se mide desde el último paquete de **posición**, no se reinicia al recibir un texto.
 
 ### Deduplicación
 

@@ -42,7 +42,7 @@ def test_osmnote_variants(processor, db, position_cache):
 
 
 def test_osmnote_approximate_position(processor, db, position_cache):
-    """Test osmnote with approximate position (15-60s old)."""
+    """Test osmnote with approximate position (15-120s old)."""
     node_id = "test_node"
     position_cache.update(node_id, 1.0, 2.0)
     

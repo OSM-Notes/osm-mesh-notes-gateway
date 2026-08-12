@@ -104,11 +104,22 @@ def test_mark_notified_sent(db):
 def test_update_note_error(db):
     """Test updating note with error."""
     queue_id = db.create_note("node1", 1.0, 2.0, "test", "test")
-    
+
     db.update_note_error(queue_id, "Test error message")
-    
+
     note = db.get_note_by_queue_id(queue_id)
     assert note["last_error"] == "Test error message"
+
+
+def test_update_note_error_includes_retry_count(db):
+    """Retry count must be persisted in last_error for failed notifications."""
+    from gateway.config import OSM_MAX_RETRIES
+
+    queue_id = db.create_note("node1", 1.0, 2.0, "test", "test")
+    db.update_note_error(queue_id, "Error de conexión", retry_count=2)
+
+    note = db.get_note_by_queue_id(queue_id)
+    assert note["last_error"] == f"Error de conexión (intento 2/{OSM_MAX_RETRIES})"
 
 
 def test_check_duplicate_different_time_bucket(db):

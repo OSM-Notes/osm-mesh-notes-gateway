@@ -133,8 +133,6 @@ class NotificationManager:
         osm_note_id: Optional[int] = None,
         osm_note_url: Optional[str] = None,
     ):
-        # Get user's preferred language
-        user_lang = self.db.get_user_language(node_id)
         """
         Send acknowledgment DM to a node.
 
@@ -155,6 +153,9 @@ class NotificationManager:
             Respects anti-spam limits (max 3 notifications per minute per node).
             In DRY_RUN mode, logs instead of sending.
         """
+        # Get user's preferred language
+        user_lang = self.db.get_user_language(node_id)
+
         if DRY_RUN:
             logger.info(f"[DRY_RUN] Would send ACK to {node_id}: {status}")
             return
@@ -359,13 +360,15 @@ class NotificationManager:
 
     def _send_summary(self, node_id: str, count: int):
         """Send summary message when anti-spam triggered."""
-        message = (
-            f"✅ Se enviaron {count} reportes en cola. "
-            "Usa #osmlist para ver detalles."
-        )
+        user_lang = self.db.get_user_language(node_id)
+        message = _(
+            "✅ Se enviaron {count} reportes en cola. Usa #osmlist para ver detalles.",
+            user_lang,
+        ).format(count=count)
         if self.serial.send_dm(node_id, message):
             # Mark all as notified
             pending = self.db.get_pending_for_notification()
             for note in pending:
                 if note["node_id"] == node_id:
                     self.db.mark_notified_sent(note["local_queue_id"])
+            self._record_notification(node_id)

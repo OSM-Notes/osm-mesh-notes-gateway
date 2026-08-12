@@ -241,7 +241,7 @@ class Database:
                 UPDATE notes
                 SET last_error = ?
                 WHERE local_queue_id = ?
-            """, (error, local_queue_id))
+            """, (error_with_retry, local_queue_id))
             conn.commit()
 
     def mark_notified_sent(self, local_queue_id: str):

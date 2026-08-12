@@ -262,9 +262,11 @@ class CommandProcessor:
         Args:
             node_id: Meshtastic node ID sending the message
             text: Message text content
-            lat: Optional latitude (updates position cache when position_source != "node_info")
-            lon: Optional longitude (updates position cache when position_source != "node_info")
+            lat: Optional latitude (for note creation / node_info fallback only;
+                does not refresh cache age)
+            lon: Optional longitude (same as lat)
             timestamp: Optional message timestamp (defaults to current time)
+            device_uptime: Optional seconds since device boot
             position_source: "cache" | "node_info" | "none" - do not treat node_info as fresh
 
         Returns:
@@ -291,10 +293,9 @@ class CommandProcessor:
         text = text.strip()
         text_lower = text.lower()
 
-        # Update position cache only when position came from a real packet (cache).
-        # Do not update when position_source is "node_info" (can be stale).
-        if lat is not None and lon is not None and position_source != "node_info":
-            self.position_cache.update(node_id, lat, lon)
+        # Do NOT update position cache from text messages. Cached lat/lon are
+        # already stored when POSITION packets arrive. Updating here would reset
+        # received_at and make stale GPS look fresh (bypassing POS_MAX).
 
         # Get user's preferred language
         user_lang = self.db.get_user_language(node_id)
@@ -347,9 +348,10 @@ class CommandProcessor:
         import requests
         internet_ok = False
         try:
-            response = requests.get("https://www.google.com", timeout=3)
+            # Prefer OSM itself as connectivity check (same dependency as note upload)
+            response = requests.get("https://www.openstreetmap.org", timeout=3)
             internet_ok = response.status_code == 200
-        except:
+        except requests.RequestException:
             pass
 
         total_queue = self.db.get_total_queue_size()

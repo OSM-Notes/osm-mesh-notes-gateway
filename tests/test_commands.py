@@ -87,17 +87,40 @@ def test_osmnote_stale_gps(processor, db, position_cache):
     position_cache.update(node_id, 1.0, 2.0)
     # Simulate old position (older than POS_MAX)
     position_cache.positions[node_id].received_at = time.time() - (POS_MAX + 10)
-    
+
     cmd_type, response = processor.process_message(node_id, "#osmnote test")
     assert cmd_type == "osmnote_reject"
     assert "muy vieja" in response
+
+
+def test_osmnote_does_not_refresh_position_age_on_text(processor, db, position_cache):
+    """Text messages must not reset GPS age (would bypass POS_MAX)."""
+    from gateway.config import POS_MAX
+
+    node_id = "test_node"
+    position_cache.update(node_id, 1.0, 2.0)
+    stale_at = time.time() - (POS_MAX + 10)
+    position_cache.positions[node_id].received_at = stale_at
+
+    # Passing lat/lon with position_source=cache must still reject as stale
+    cmd_type, response = processor.process_message(
+        node_id,
+        "#osmnote stale should reject",
+        lat=1.0,
+        lon=2.0,
+        position_source="cache",
+    )
+    assert cmd_type == "osmnote_reject"
+    assert "muy vieja" in response
+    # Age timestamp must be unchanged
+    assert position_cache.positions[node_id].received_at == stale_at
 
 
 def test_osmnote_success(processor, db, position_cache):
     """Test successful osmnote."""
     node_id = "test_node"
     position_cache.update(node_id, 1.0, 2.0)
-    
+
     cmd_type, response = processor.process_message(node_id, "#osmnote test message")
     assert cmd_type == "osmnote_queued"
     assert response.startswith("Q-")

@@ -139,14 +139,21 @@ def test_process_pending_max_retries_exceeded(mock_post, worker, db):
     # Should not retry anymore (should skip and mark error)
     sent_count = worker.process_pending(limit=10)
     assert sent_count == 0
-    
-    # Retry count should be removed after max retries exceeded
-    assert queue_id not in worker.retry_counts
-    
-    # Note should have error message
+    assert mock_post.call_count == 0
+
+    # Retry count stays at max so the same process does not immediately retry again
+    assert worker.retry_counts[queue_id] == OSM_MAX_RETRIES
+
+    # Note should have error message including intento N/N (for failed notifications)
     note = db.get_note_by_queue_id(queue_id)
     assert note["last_error"] is not None
     assert str(OSM_MAX_RETRIES) in note["last_error"]
+    assert f"intento {OSM_MAX_RETRIES}/{OSM_MAX_RETRIES}" in note["last_error"]
+
+    # Subsequent process_pending must still skip via persisted last_error marker
+    sent_count = worker.process_pending(limit=10)
+    assert sent_count == 0
+    assert mock_post.call_count == 0
 
 
 @patch('gateway.osm_worker.requests.post')

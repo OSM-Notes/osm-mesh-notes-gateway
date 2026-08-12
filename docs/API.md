@@ -8,15 +8,20 @@ Documentación de la API interna del gateway.
 
 Configuración centralizada del sistema.
 
-**Constantes**:
+**Constantes** (valores vigentes; ver también `docs/spec.md` §18):
 - `DATA_DIR`: Directorio de datos (default: `/var/lib/lora-osmnotes`)
 - `DB_PATH`: Ruta a la base de datos SQLite
 - `SERIAL_PORT`: Puerto serial (default: `/dev/ttyACM0`)
 - `DRY_RUN`: Modo de prueba (default: `False`)
-- `POS_GOOD`: Umbral GPS bueno en segundos (15)
-- `POS_MAX`: Umbral GPS máximo en segundos (60)
-- `OSM_RATE_LIMIT_SECONDS`: Rate limit OSM (3)
-- `WORKER_INTERVAL`: Intervalo worker en segundos (30)
+- `GPS_VALIDATION_DISABLED`: Bypass GPS (solo depuración)
+- `POS_GOOD`: Umbral GPS bueno en segundos (**15**)
+- `POS_MAX`: Umbral GPS máximo en segundos (**120**)
+- `DEDUP_TIME_BUCKET_SECONDS`: **120**
+- `OSM_RATE_LIMIT_SECONDS`: Rate limit OSM (**3**)
+- `OSM_MAX_RETRIES`: **3**
+- `WORKER_INTERVAL`: Intervalo worker en segundos (**30**)
+- `LANGUAGE`: idioma por defecto (`es`)
+- `DAILY_BROADCAST_ENABLED`: broadcast diario opcional
 
 ### gateway.database.Database
 

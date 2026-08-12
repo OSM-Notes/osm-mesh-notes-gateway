@@ -1,252 +1,93 @@
 # Arquitectura del Sistema
 
+Documento alineado con el código en `src/gateway/` y con [`spec.md`](spec.md).
+
 ## Visión General
 
-El gateway Meshtastic → OSM Notes es un sistema de procesamiento de mensajes que convierte reportes de campo en notas de OpenStreetMap. Está diseñado para operar de forma autónoma en una Raspberry Pi con conexión serial USB a un dispositivo Meshtastic.
+El gateway convierte reportes Meshtastic (`#osmnote`) en notas de OpenStreetMap. Corre en una Raspberry Pi con un dispositivo Meshtastic por USB, cola SQLite store-and-forward y worker periódico.
 
-## Componentes Principales
+```
+Meshtastic USB ──► MeshtasticSerial ──► Gateway ──► CommandProcessor
+                         │                  │              │
+                    POSITION_APP       NotificationMgr   Database
+                         │                  ▲              │
+                   PositionCache            │         OSMWorker ──► OSM Notes API
+                                            │              │
+                                       (DM ACK/Q→Note)  Geocoding (Nominatim)
+```
+
+## Componentes
 
 ### 1. MeshtasticSerial (`meshtastic_serial.py`)
 
-**Responsabilidad**: Comunicación serial con dispositivo Meshtastic.
+Comunicación real vía `meshtastic.serial_interface` + pubsub:
 
-- **Conexión**: Maneja conexión/reconexión automática al puerto USB
-- **Lectura**: Thread separado para leer mensajes entrantes
-- **Escritura**: Envío de DMs y broadcasts
-- **Parser**: Convierte mensajes serial a formato interno (JSON o pipe-separated)
-
-**Flujo**:
-```
-Serial Port → Buffer → Parser → Message Callback → Gateway._handle_message()
-```
+- Temas: `meshtastic.receive.text`, `.position`, `.receive` (fallback)
+- Normaliza `node_id` a forma canónica `!` + 8 hex
+- Actualiza `PositionCache` **solo** en paquetes de posición
+- En mensajes de texto adjunta lat/lon desde cache o, si no hay, desde `node_info` (marcando `position_source`)
+- Configura rol del gateway a `CLIENT_MUTE`
+- `send_dm` / `send_broadcast`
 
 ### 2. PositionCache (`position_cache.py`)
 
-**Responsabilidad**: Cache en memoria de posiciones GPS por nodo.
-
-- Almacena última posición conocida de cada nodo
-- Calcula edad de posición para validación
-- Mantiene contador de actualizaciones
-
-**Estructura**:
-```python
-{
-    "node_id": Position(lat, lon, received_at, seen_count)
-}
-```
+Cache en memoria + tabla `position_cache`. La edad (`get_age`) usa `received_at` del último POSITION. No debe refrescarse al reutilizar coordenadas en un texto.
 
 ### 3. CommandProcessor (`commands.py`)
 
-**Responsabilidad**: Procesamiento de comandos y hashtags.
-
-- **Comandos soportados**: #osmhelp, #osmstatus, #osmcount, #osmlist, #osmqueue
-- **Reportes**: #osmnote con variantes (#osm-note, #osm_note)
-- **Validación GPS**: Verifica edad de posición (POS_GOOD=15s, POS_MAX=60s)
-- **Deduplicación**: Verifica duplicados antes de crear nota
-- **Normalización**: Normaliza texto para comparación
-
-**Flujo de #osmnote**:
-```
-Mensaje → Extraer hashtag → Validar GPS → Verificar duplicado → Crear nota → Retornar queue_id
-```
+Hashtags, GPS, dedupe, rate limit, i18n. Ver lista completa en `spec.md` §9.
 
 ### 4. Database (`database.py`)
 
-**Responsabilidad**: Persistencia SQLite con store-and-forward.
-
-- **Tabla principal**: `notes` con todos los campos necesarios
-- **Índices**: Optimizados para consultas por node_id, status, created_at
-- **Operaciones**: CRUD completo + estadísticas + deduplicación
-
-**Esquema**:
-```sql
-notes (
-    id, local_queue_id, node_id, created_at,
-    lat, lon, text_original, text_normalized,
-    status, osm_note_id, osm_note_url, sent_at,
-    last_error, notified_sent
-)
-```
+SQLite con WAL + `synchronous=FULL`. Tablas: `notes`, `position_cache`, `user_preferences`, `system_state`.
 
 ### 5. OSMWorker (`osm_worker.py`)
 
-**Responsabilidad**: Envío de notas a OSM Notes API.
-
-- **Rate Limiting**: Mínimo 3 segundos entre envíos
-- **Manejo de errores**: Timeouts, conexión, errores HTTP
-- **Dry Run**: Modo de prueba sin enviar realmente
-- **Procesamiento batch**: Procesa múltiples notas pendientes
-
-**Flujo**:
-```
-Pending Notes → Rate Limit Check → POST to OSM API → Update Status
-```
+POST a OSM Notes, rate limit 3 s, reintentos con `last_error` marcado `intento n/N`.
 
 ### 6. NotificationManager (`notifications.py`)
 
-**Responsabilidad**: Sistema de notificaciones DM con anti-spam.
-
-- **ACKs**: Envía confirmaciones de éxito, cola, rechazo, duplicado
-- **Anti-spam**: Máximo 3 notificaciones por minuto por nodo
-- **Notificaciones proactivas**: Q→Note cuando se envía desde cola
-- **Resúmenes**: Envía resumen cuando se excede límite anti-spam
-
-**Tipos de ACK**:
-- `success`: Nota creada en OSM (incluye ID y URL)
-- `queued`: Nota en cola (incluye queue_id)
-- `reject`: Rechazo (falta GPS, texto, etc.)
-- `duplicate`: Duplicado detectado
+ACKs, anti-spam, split de mensajes largos, Q→Note, notificaciones de fallo.
 
 ### 7. Gateway (`main.py`)
 
-**Responsabilidad**: Orquestación y ciclo principal.
+Orquesta serial + worker 30 s + corrección NTP + broadcast diario opcional.
 
-- **Inicialización**: Crea todos los componentes
-- **Message Handler**: Procesa mensajes entrantes
-- **Worker Thread**: Procesa cola cada 30 segundos
-- **Signal Handling**: Manejo graceful de shutdown
+**Envío inmediato**: tras encolar, intenta `send_note`; si OK, ACK success y `notified_sent=1` (evita doble Q→Note).
 
-**Flujo Principal**:
-```
-Start → Initialize Components → Start Serial → Start Worker Thread → Main Loop
-```
-
-## Flujo de Datos
-
-### Creación de Nota
+## Flujo `#osmnote`
 
 ```
-1. Mensaje llega por Serial
-   ↓
-2. MeshtasticSerial._parse_message()
-   ↓
-3. Gateway._handle_message()
-   ↓
-4. CommandProcessor.process_message()
-   ↓
-5. Validación GPS (PositionCache)
-   ↓
-6. Verificación Duplicado (Database.check_duplicate)
-   ↓
-7. Crear Nota (Database.create_note) → Status: 'pending'
-   ↓
-8. Intentar Envío Inmediato (OSMWorker.send_note)
-   ↓
-9a. Si éxito → Update Status: 'sent' → ACK success
-9b. Si falla → Mantener 'pending' → ACK queued
+POSITION_APP → PositionCache.update(received_at=now)
+     …
+TEXT #osmnote → CommandProcessor
+  → validar GPS por edad del cache (sin refrescar received_at)
+  → dedupe → create_note(pending)
+  → intentar OSM inmediato
+      OK  → sent + ACK success + notified_sent=1
+      FAIL → pending + ACK queued
+Worker 30s → process_pending → Q→Note si notified_sent=0
 ```
-
-### Procesamiento de Cola
-
-```
-Worker Thread (cada 30s):
-   ↓
-1. OSMWorker.process_pending() → Obtener notas 'pending'
-   ↓
-2. Para cada nota:
-   - Rate Limit Check
-   - POST to OSM API
-   - Update Status: 'sent' o 'error'
-   ↓
-3. NotificationManager.process_sent_notifications()
-   ↓
-4. Enviar DM Q→Note (con anti-spam)
-```
-
-## Deduplicación
-
-**Reglas**:
-1. Mismo `node_id`
-2. Texto normalizado idéntico (trim + collapse whitespace)
-3. Ubicación cercana (redondeada a 4 decimales ≈ 11m)
-4. Mismo bucket temporal (120 segundos)
-
-**Implementación**:
-- `Database.check_duplicate()`: Query SQL con condiciones
-- `CommandProcessor.normalize_text()`: Normalización de texto
-- Bucket temporal: `floor(timestamp / 120)`
 
 ## Validación GPS
 
-**Umbrales**:
-- `POS_GOOD = 15s`: Posición fresca (normal)
-- `POS_MAX = 60s`: Posición máxima aceptable
+- `POS_GOOD = 15s`, `POS_MAX = 120s`
+- Sin GPS / >120s → rechazo
+- 15–120s → `[posición aproximada]`
+- Solo `node_info` → aproximada, sin escribir cache
 
-**Comportamiento**:
-- Sin GPS: Rechazar
-- > 60s: Rechazar
-- 15-60s: Aceptar con marca "[posición aproximada]"
-- ≤ 15s: Aceptar normal
+## Deduplicación
 
-## Manejo de Errores
-
-### Serial
-- **Desconexión**: Auto-reconexión cada 5 segundos
-- **Errores de lectura**: Log y continuar
-- **Errores de escritura**: Log y retornar False
-
-### OSM API
-- **Timeout**: Marcar error, mantener pending
-- **Connection Error**: Marcar error, mantener pending
-- **HTTP Error**: Marcar error con código, mantener pending
-- **Rate Limit**: Respetar delay, reintentar en siguiente ciclo
-
-### Base de Datos
-- **Errores SQL**: Rollback y log
-- **Integrity Errors**: Retry con nuevo queue_id
-- **Connection Timeout**: Retry con timeout de 10s
+Mismo `node_id` + texto normalizado + coords ~4 decimales + bucket 120 s.
 
 ## Threading
 
-**Threads**:
-1. **Main Thread**: Loop principal, signal handling
-2. **Serial Read Thread**: Lectura continua de serial (daemon)
-3. **Worker Thread**: Procesamiento periódico de cola (daemon)
+1. Main (señales + loop)
+2. Callbacks Meshtastic (pubsub)
+3. Worker daemon (cola / notificaciones / NTP / broadcast)
 
-**Sincronización**:
-- SQLite maneja concurrencia internamente
-- PositionCache: Acceso desde múltiples threads (simple dict)
-- No hay locks explícitos (SQLite es thread-safe)
+SQLite con timeout; PositionCache compartido (escrituras de posición solo desde handler de POSITION).
 
 ## Configuración
 
-**Fuentes**:
-1. Variables de entorno (`.env`)
-2. Valores por defecto en `config.py`
-3. Fallback a temp directory si no hay permisos
-
-**Parámetros clave**:
-- `SERIAL_PORT`: Puerto serial del dispositivo
-- `DRY_RUN`: Modo de prueba
-- `POS_GOOD`, `POS_MAX`: Umbrales GPS
-- `OSM_RATE_LIMIT_SECONDS`: Rate limiting OSM
-- `WORKER_INTERVAL`: Intervalo de worker
-
-## Escalabilidad
-
-**Limitaciones actuales**:
-- Base de datos: SQLite (single-writer)
-- Rate limiting: Por usuario (implementado)
-
-**Características implementadas**:
-- Cache GPS persistente en SQLite (sobrevive a reinicios y cortes de energía)
-- SQLite configurado con WAL mode y FULL sync para tolerancia a cortes de energía
-- Rate limiting por usuario para prevenir spam
-
-**Mejoras futuras**:
-- Migrar a PostgreSQL para múltiples writers
-- Métricas y monitoreo
-
-## Seguridad
-
-**Consideraciones**:
-- Validación de entrada (texto, coordenadas)
-- Sanitización de mensajes antes de enviar a OSM
-- Advertencias de privacidad en todos los mensajes
-- No almacenar datos personales
-- Logs sin información sensible
-
-**Mejoras futuras**:
-- Autenticación de nodos
-- Cifrado de mensajes
-- Rate limiting por nodo más estricto
+`.env` en `/var/lib/lora-osmnotes/.env` o raíz del proyecto. Constantes en `config.py`. Ver `spec.md` §18 y `.env.example`.

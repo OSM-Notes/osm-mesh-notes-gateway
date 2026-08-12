@@ -175,18 +175,23 @@ class OSMWorker:
         for note in pending:
             queue_id = note["local_queue_id"]
             
+            # Check if max retries already exceeded (persisted in last_error or memory)
+            last_error = note.get("last_error") or ""
+            if f"(intento {OSM_MAX_RETRIES}/{OSM_MAX_RETRIES})" in last_error:
+                continue
+
             # Get retry count
             retry_count = self.retry_counts.get(queue_id, 0)
-            
-            # Check if max retries exceeded
+
+            # Check if max retries exceeded in this process
             if retry_count >= OSM_MAX_RETRIES:
                 error_msg = f"Falló después de {OSM_MAX_RETRIES} intentos. Revisa logs."
-                self.db.update_note_error(queue_id, error_msg, retry_count=retry_count)
+                self.db.update_note_error(queue_id, error_msg, retry_count=OSM_MAX_RETRIES)
                 logger.warning(f"Max retries exceeded for {queue_id}")
-                # Remove from retry tracking
-                del self.retry_counts[queue_id]
+                # Keep count at max so we do not immediately retry again this process
+                self.retry_counts[queue_id] = OSM_MAX_RETRIES
                 continue
-            
+
             # Get user's preferred language for attribution
             user_locale = self.db.get_user_language(note["node_id"])
             

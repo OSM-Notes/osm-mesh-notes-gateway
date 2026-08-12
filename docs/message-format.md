@@ -1,97 +1,65 @@
 # Formato de Mensajes Meshtastic
 
-## Nota sobre el MVP
+Este gateway usa el protocolo **real** de Meshtastic (protobuf) mediante la biblioteca `meshtastic` (`SerialInterface` + pubsub). No usa un protocolo de texto ad-hoc por línea.
 
-Este gateway MVP usa un formato simplificado de mensajes para facilitar la implementación inicial. En producción, Meshtastic usa protocolo protobuf, pero para el MVP se aceptan formatos de texto simples.
+## Entrada
 
-## Formatos Soportados
+### Mensajes de texto (`TEXT_MESSAGE_APP`)
 
-### Formato JSON (recomendado)
+Suscripción: `meshtastic.receive.text` (y fallback en `meshtastic.receive`).
 
-```json
+Campos relevantes del packet:
+- `from` / `fromId` → normalizado a `node_id` canónico: `!` + 8 hex lowercase
+- `decoded.text` → cuerpo del mensaje
+
+El gateway construye un dict interno:
+
+```python
 {
-  "from": "node_id",
-  "lat": 4.6097,
-  "lon": -74.0817,
-  "text": "#osmnote Mensaje de prueba"
+  "node_id": "!a1b2c3d4",
+  "text": "#osmnote ...",
+  "lat": 4.6097,          # opcional
+  "lon": -74.0817,        # opcional
+  "timestamp": 1710000000.0,
+  "device_uptime": 45.0,  # opcional (segundos)
+  "position_source": "cache" | "node_info" | "none",
 }
 ```
 
-### Formato Pipe-separated
+Origen de lat/lon al llegar un texto:
+1. **cache** — última posición de un paquete `POSITION_APP` (preferido; la edad es real)
+2. **node_info** — posición conocida por la mesh en `interface.nodes` (puede estar vieja; se marca aproximada y **no** se escribe en el cache)
+3. **none** — sin coordenadas
+
+### Posiciones (`POSITION_APP`)
+
+Suscripción: `meshtastic.receive.position`.
+
+Coordenadas Meshtastic enteras (`latitudeI` / `longitudeI`) ÷ 1e7 → float.  
+Esto es lo único que debe llamar a `PositionCache.update()`.
+
+## Salida
+
+### DM
+
+`MeshtasticSerial.send_dm(node_id, message)` → `interface.sendText(..., destinationId=node_num)`.
+
+Mensajes largos se parten en el notification manager (~220 bytes UTF-8 por parte) con prefijo `[i/n]`.
+
+### Broadcast
+
+`send_broadcast(message)` → `sendText` sin destino.
+
+## Comandos de usuario (capa aplicación)
+
+Ver [`spec.md`](spec.md) §9. Ejemplos:
 
 ```
-node_id|lat|lon|mensaje
+#osmnote Árbol caído frente al colegio
+#osmhelp
+#osmstatus
 ```
 
-Ejemplo:
-```
-!12345678|4.6097|-74.0817|#osmnote Mensaje de prueba
-```
+## Nota histórica
 
-Si no hay GPS disponible:
-```
-!12345678|||#osmnote Mensaje sin GPS
-```
-
-## Integración con Meshtastic Real
-
-Para integrar con el protocolo real de Meshtastic, se recomienda usar la biblioteca `meshtastic-python`:
-
-```python
-import meshtastic.serial_interface
-
-interface = meshtastic.serial_interface.SerialInterface()
-def onReceive(packet, interface):
-    node_id = packet['from']
-    text = packet.get('decoded', {}).get('text', '')
-    # Extract GPS from telemetry or position packets
-    # ...
-    
-interface.subscribe(onReceive)
-```
-
-## Comandos de Envío
-
-### Enviar DM
-
-Formato de comando:
-```
-DM|node_id|mensaje
-```
-
-Ejemplo:
-```
-DM|!12345678|✅ Reporte recibido
-```
-
-### Enviar Broadcast
-
-Formato de comando:
-```
-BC|mensaje
-```
-
-Ejemplo:
-```
-BC|ℹ️ Gateway de notas OSM activo
-```
-
-## Notas de Implementación
-
-- El parser actual es simplificado y espera mensajes terminados en `\n`
-- Los mensajes se leen línea por línea desde el buffer serial
-- El baudrate por defecto es 9600
-- Se requiere reconexión automática en caso de desconexión
-
-## Migración a Protobuf
-
-Para migrar a protobuf real:
-
-1. Instalar `meshtastic-python`:
-```bash
-pip install meshtastic
-```
-
-2. Modificar `meshtastic_serial.py` para usar `SerialInterface` de meshtastic
-3. Implementar handlers para diferentes tipos de paquetes (text, position, telemetry)
-4. Extraer GPS de paquetes de posición/telemetría
+Versiones tempranas del documento describían formatos JSON/pipe y baudrate 9600 como MVP de texto. Eso **ya no aplica**: la implementación productiva es protobuf vía `meshtastic-python`.
