@@ -179,6 +179,9 @@ https://www.openstreetmap.org/note/456789
 Para más información, consulta la documentación técnica:
 
 - **[docs/README.md](docs/README.md)** - Índice de toda la documentación
+- **[docs/ADOPTION.md](docs/ADOPTION.md)** - Adopción humanitaria (ética, operación, salud)
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** - Prioridades y checklist de release
+- **[docs/FIELD_CARD.md](docs/FIELD_CARD.md)** - Tarjeta imprimible para reporteros
 - **[docs/spec.md](docs/spec.md)** - Especificación canónica (fuente de verdad de comportamiento)
 - **[docs/FIELD_DEPLOYMENT_GUIDE.md](docs/FIELD_DEPLOYMENT_GUIDE.md)** - Guía de despliegue en terreno
 - **[docs/architecture.md](docs/architecture.md)** - Arquitectura del sistema y diseño
