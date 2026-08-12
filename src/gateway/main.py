@@ -108,6 +108,7 @@ class Gateway:
         lon = msg.get("lon")
         timestamp = msg.get("timestamp")
         device_uptime = msg.get("device_uptime")  # Seconds since device boot
+        position_source = msg.get("position_source", "none")  # "cache" | "node_info" | "none"
 
         if not node_id:
             logger.warning("Received message without node_id")
@@ -115,8 +116,9 @@ class Gateway:
 
         logger.info(f"Received message from {node_id}: {text[:50]}...")
 
-        # Update position cache if GPS data available
-        if lat is not None and lon is not None:
+        # Only update position cache when position came from a real position packet (cache).
+        # Do not update when from node_info: that data can be old and would wrongly pass age checks.
+        if lat is not None and lon is not None and position_source == "cache":
             self.position_cache.update(node_id, lat, lon)
 
         # Process message
@@ -127,6 +129,7 @@ class Gateway:
             lon=lon,
             timestamp=timestamp,
             device_uptime=device_uptime,
+            position_source=position_source,
         )
 
         # Handle response

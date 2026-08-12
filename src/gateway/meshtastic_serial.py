@@ -18,6 +18,31 @@ from .config import SERIAL_PORT
 logger = logging.getLogger(__name__)
 
 
+def _normalize_node_id(from_node: Any) -> Optional[str]:
+    """Normalize packet 'from' (int or string) to canonical node_id: ! + 8 lowercase hex chars.
+
+    Meshtastic node numbers are 32-bit; some code paths or the library may provide
+    them as int, or as string (e.g. fromId). Using a single canonical form avoids
+    the same device appearing as two nodes (e.g. !xxxxa9a0 vs !xxxxa0a9) due to
+    byte order or string format differences.
+    """
+    if from_node is None:
+        return None
+    if isinstance(from_node, int):
+        return f"!{from_node & 0xFFFFFFFF:08x}"
+    s = str(from_node).strip().lower().lstrip("!")
+    # Keep only hex chars
+    s = "".join(c for c in s if c in "0123456789abcdef")
+    if not s:
+        return None
+    # Canonical: exactly 8 hex chars (node number is 32-bit)
+    if len(s) > 8:
+        s = s[-8:]
+    elif len(s) < 8:
+        s = s.zfill(8)
+    return f"!{s}"
+
+
 class MeshtasticSerial:
     """
     Meshtastic serial connection using meshtastic-python library.
@@ -286,32 +311,31 @@ class MeshtasticSerial:
                 logger.info(f"Skipping message - missing from_node or text (from_node={from_node}, text={bool(text)})")
                 return
 
-            # Convert node number to string format (Meshtastic uses 8-char hex)
-            if isinstance(from_node, int):
-                # Format as !12345678 (8 hex chars, lowercase)
-                node_id = f"!{from_node:08x}"
-            else:
-                node_id = str(from_node)
-                # Ensure it starts with ! if it's a hex string
-                if not node_id.startswith("!") and len(node_id) > 0:
-                    node_id = f"!{node_id}"
+            node_id = _normalize_node_id(from_node)
+            if not node_id:
+                logger.warning(f"Could not normalize node_id from from_node={from_node!r}")
+                return
 
             # Initialize position variables using a list to avoid Python scope issues
             # Python treats variables assigned in nested try blocks as local, causing UnboundLocalError
             position_data = [None, None]  # [lat, lon]
 
             # Get position from cache if available
+            position_source = "none"  # "cache" | "node_info" | "none"
             if self._use_position_cache:
                 # Use PositionCache API
                 pos = self.position_cache.get(node_id)
                 if pos:
                     position_data[0] = pos.lat
                     position_data[1] = pos.lon
+                    position_source = "cache"
             else:
                 # Use simple dict cache (backward compatibility)
                 position = self.position_cache.get(node_id, {})
                 position_data[0] = position.get("lat")
                 position_data[1] = position.get("lon")
+                if position_data[0] is not None and position_data[1] is not None:
+                    position_source = "cache"
 
             # Try to get device uptime and position from node info
             device_uptime = None
@@ -359,22 +383,15 @@ class MeshtasticSerial:
                                             # Calculate position from nodeinfo
                                             node_lat = lat_i / 1e7
                                             node_lon = lon_i / 1e7
-                                            logger.info(f"Got position from nodeinfo for {node_id}: ({node_lat}, {node_lon})")
-
-                                            # Update cache with position from nodeinfo
-                                            if self._use_position_cache:
-                                                self.position_cache.update(node_id, node_lat, node_lon)
-                                            else:
-                                                with self._lock:
-                                                    self.position_cache[node_id] = {
-                                                        "lat": node_lat,
-                                                        "lon": node_lon,
-                                                        "timestamp": time.time(),
-                                                    }
-                                            # Update position_data
+                                            logger.info(
+                                                f"Got position from nodeinfo for {node_id}: ({node_lat}, {node_lon}) "
+                                                "(may be old - not updating cache)"
+                                            )
+                                            # Do NOT update cache: node_info can be stale (last time mesh saw this node).
+                                            # Using it would mark position as 'just received' and hide the real age.
                                             position_data[0] = node_lat
                                             position_data[1] = node_lon
-                                            logger.info(f"Updated position cache from nodeinfo for {node_id}")
+                                            position_source = "node_info"
                                         else:
                                             logger.debug(f"Position integers are None for {node_id}")
                                     else:
@@ -403,6 +420,7 @@ class MeshtasticSerial:
                 "text": text,
                 "timestamp": time.time(),
                 "device_uptime": device_uptime,  # Seconds since device boot
+                "position_source": position_source,  # "cache" | "node_info" | "none"
             })
 
         except Exception as e:
@@ -455,13 +473,10 @@ class MeshtasticSerial:
             if not from_node or not position_data:
                 return
 
-            # Convert node number to string format
-            if isinstance(from_node, int):
-                node_id = f"!{from_node:08x}"
-            else:
-                node_id = str(from_node)
-                if not node_id.startswith("!") and len(node_id) > 0:
-                    node_id = f"!{node_id}"
+            node_id = _normalize_node_id(from_node)
+            if not node_id:
+                logger.debug(f"Could not normalize node_id from from_node={from_node!r}, skipping position")
+                return
 
             # Extract position (Meshtastic uses integer coordinates)
             lat_i = position_data.get("latitudeI")

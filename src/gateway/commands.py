@@ -251,19 +251,21 @@ class CommandProcessor:
         lon: Optional[float] = None,
         timestamp: Optional[float] = None,
         device_uptime: Optional[float] = None,
+        position_source: str = "none",
     ) -> Tuple[str, Optional[str]]:
         """
         Process incoming message and return command type and response.
 
-        Updates position cache if GPS data is provided. Processes commands
-        and creates notes for #osmnote reports.
+        Updates position cache if GPS data is provided (and not from node_info).
+        Processes commands and creates notes for #osmnote reports.
 
         Args:
             node_id: Meshtastic node ID sending the message
             text: Message text content
-            lat: Optional latitude (updates position cache)
-            lon: Optional longitude (updates position cache)
+            lat: Optional latitude (updates position cache when position_source != "node_info")
+            lon: Optional longitude (updates position cache when position_source != "node_info")
             timestamp: Optional message timestamp (defaults to current time)
+            position_source: "cache" | "node_info" | "none" - do not treat node_info as fresh
 
         Returns:
             Tuple of (command_type, response_message):
@@ -289,8 +291,9 @@ class CommandProcessor:
         text = text.strip()
         text_lower = text.lower()
 
-        # Update position cache if GPS data available
-        if lat is not None and lon is not None:
+        # Update position cache only when position came from a real packet (cache).
+        # Do not update when position_source is "node_info" (can be stale).
+        if lat is not None and lon is not None and position_source != "node_info":
             self.position_cache.update(node_id, lat, lon)
 
         # Get user's preferred language
@@ -331,7 +334,10 @@ class CommandProcessor:
             if not allowed:
                 return "osmnote_reject", rate_limit_msg
 
-            return self._handle_osmnote(node_id, osmnote_text, timestamp, device_uptime, user_lang)
+            return self._handle_osmnote(
+                node_id, osmnote_text, timestamp, device_uptime, user_lang,
+                msg_lat=lat, msg_lon=lon, position_source=position_source,
+            )
 
         # Ignore other messages
         return "ignore", None
@@ -560,9 +566,14 @@ class CommandProcessor:
         timestamp: Optional[float],
         device_uptime: Optional[float] = None,
         locale: Optional[str] = None,
+        msg_lat: Optional[float] = None,
+        msg_lon: Optional[float] = None,
+        position_source: str = "none",
     ) -> Tuple[str, Optional[str]]:
         """Handle #osmnote command."""
         import time
+
+        from .position_cache import Position
 
         # Check message length
         if len(text) > MESHTASTIC_MAX_MESSAGE_LENGTH:
@@ -577,14 +588,33 @@ class CommandProcessor:
 
         text_normalized = self.normalize_text(text)
 
-        # Get position from cache
-        position = self.position_cache.get(node_id)
-        logger.debug(f"Position cache lookup for {node_id}: {position}")
+        # Position from message (node_info) when gateway has no recent position packet from this node.
+        # node_info can be old, so we use it but always mark as approximate and do not update cache.
+        use_message_position = (
+            position_source == "node_info"
+            and msg_lat is not None
+            and msg_lon is not None
+        )
 
-        if position:
-            logger.debug(f"Position found in cache for {node_id}: lat={position.lat}, lon={position.lon}, age={self.position_cache.get_age(node_id)}s")
+        if use_message_position:
+            position = Position(lat=msg_lat, lon=msg_lon, received_at=time.time(), seen_count=1)
+            logger.info(
+                f"Using position from node_info for {node_id}: ({position.lat}, {position.lon}) "
+                "- marked as approximate (node_info may be old)"
+            )
         else:
-            logger.warning(f"No position found in cache for {node_id}")
+            # Get position from cache (from real POSITION_APP packets)
+            position = self.position_cache.get(node_id)
+            logger.debug(f"Position cache lookup for {node_id}: {position}")
+
+            if position:
+                pos_age = self.position_cache.get_age(node_id)
+                logger.debug(
+                    f"Position found in cache for {node_id}: lat={position.lat}, lon={position.lon}, "
+                    f"age={pos_age}s, source={position_source}"
+                )
+            else:
+                logger.warning(f"No position found in cache for {node_id}")
 
         # If GPS validation is disabled, use a default position (Bogotá center)
         if GPS_VALIDATION_DISABLED:
@@ -593,8 +623,6 @@ class CommandProcessor:
                 default_lat = 4.6097
                 default_lon = -74.0817
                 logger.warning(f"GPS validation disabled - using default position for {node_id}: ({default_lat}, {default_lon})")
-                # Create a temporary position object
-                from .position_cache import Position
                 position = Position(
                     lat=default_lat,
                     lon=default_lon,
@@ -605,7 +633,7 @@ class CommandProcessor:
             lat = position.lat
             lon = position.lon
         else:
-            # Normal GPS validation flow
+            # Normal GPS validation flow (when not using message position from node_info)
             if not position:
                 # Check if device was recently started
                 if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
@@ -622,22 +650,23 @@ class CommandProcessor:
             if not is_valid:
                 return "osmnote_reject", error_msg
 
-            # Check position age
-            pos_age = self.position_cache.get_age(node_id)
-            if pos_age is None or pos_age > POS_MAX:
-                # Check if device was recently started
-                if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
-                    wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
-                    if wait_time > 0:
-                        return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START(
-                            wait_time=wait_time,
-                            locale=locale
-                        )
-                return "osmnote_reject", MSG_REJECT_STALE_GPS(locale=locale)
+            if not use_message_position:
+                # Check position age (only when using cache - we already trust node_info for this note)
+                pos_age = self.position_cache.get_age(node_id)
+                if pos_age is None or pos_age > POS_MAX:
+                    # Check if device was recently started
+                    if device_uptime is not None and device_uptime < DEVICE_UPTIME_RECENT:
+                        wait_time = int(DEVICE_UPTIME_GPS_WAIT - device_uptime)
+                        if wait_time > 0:
+                            return "osmnote_reject", MSG_REJECT_NO_GPS_RECENT_START(
+                                wait_time=wait_time,
+                                locale=locale
+                            )
+                    return "osmnote_reject", MSG_REJECT_STALE_GPS(locale=locale)
 
-        # Determine if position is approximate (only if GPS validation is enabled)
-        is_approximate = False
-        if not GPS_VALIDATION_DISABLED:
+        # Determine if position is approximate
+        is_approximate = use_message_position
+        if not is_approximate and not GPS_VALIDATION_DISABLED:
             pos_age = self.position_cache.get_age(node_id)
             if pos_age is not None:
                 is_approximate = POS_GOOD < pos_age <= POS_MAX
@@ -657,6 +686,13 @@ class CommandProcessor:
             time_bucket,
         ):
             return "osmnote_duplicate", MSG_DUPLICATE(locale)
+
+        # Log position used for note (helps debug wrong/missing position)
+        pos_age_s = self.position_cache.get_age(node_id) if not use_message_position else None
+        logger.info(
+            f"Creating OSM note for {node_id}: lat={position.lat}, lon={position.lon}, "
+            f"position_source={position_source}, pos_age_sec={pos_age_s}, approximate={is_approximate}"
+        )
 
         # Create note
         local_queue_id = self.db.create_note(

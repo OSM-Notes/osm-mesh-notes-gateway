@@ -66,6 +66,35 @@ sudo usermod -a -G dialout $USER
 # Cerrar sesión y volver a iniciar
 ```
 
+### La posición GPS es muy mala (nota aparece a ~2 km o más)
+
+**Síntoma:** La nota se crea en OSM pero el pin está muy lejos del lugar real (p. ej. 1–2 km).
+
+**Causa:** El T-Echo (u otro dispositivo con GPS) puede enviar una posición de baja calidad: primera fijación (“cold start”), cielo obstruido, interior o multipath. El gateway usa la última posición recibida y **no filtra por precisión** (HDOP/satelites), así que acepta cualquier coordenada válida.
+
+**Qué hacer (en el dispositivo / uso):**
+
+1. **Esperar una buena fijación antes de enviar**
+   - Deja el T-Echo **al aire libre, con cielo despejado**, 1–2 minutos antes de enviar `#osmnote`.
+   - La primera fijación suele ser muy inexacta; tras 1–2 min suele mejorar mucho.
+
+2. **Comprobar en la app Meshtastic**
+   - Conecta el teléfono al T-Echo por Bluetooth y abre la app Meshtastic.
+   - Revisa en el mapa que tu posición se vea correcta antes de enviar el reporte.
+
+3. **Evitar interior y obstáculos**
+   - En interior o con edificios/árboles que tapan el cielo, el GPS puede dar errores de cientos de metros o más.
+   - Si es posible, sal unos segundos a un lugar con mejor vista al cielo, espera a que actualice la posición y luego envía.
+
+4. **Antena GPS externa (si el dispositivo lo permite)**
+   - Algunos dispositivos permiten antena GPS externa; en zonas con mala recepción puede mejorar bastante la precisión.
+
+**¿Se está usando una posición vieja?** El gateway usa la **última posición recibida en un paquete de posición por radio** (POSITION_APP), no una coordenada “dentro” del mensaje. Si el T-Echo no envía posición a menudo, o los paquetes no llegan al gateway, puede usarse una posición antigua. En el código reciente: si solo hay posición en la base de datos del mesh (node_info), se usa pero se marca como *[posición aproximada]*. Para que la posición sea fiable, el T-Echo debe **emitir posición por radio con frecuencia** (p. ej. intervalo de emisión 60 s) y estar al alcance del gateway. En los logs verás `position_source=cache` (posición recibida por radio) o `position_source=node_info` (posición posiblemente vieja). Revisa también `pos_age_sec` al crear la nota.
+
+**Dos nodos parecidos (ej. …a9a0 y …a0a9), uno en tu posición y otro en la errónea:** Suele ser el **gateway** (Heltec, en casa) y el **T-Echo** (en campo). El que está en “tu” posición es el gateway; el que está a 2 km es el T-Echo con GPS malo o posición vieja. En la app Meshtastic puedes ver el node ID del T-Echo (Configuración / nodo) para confirmar cuál es cuál. El gateway normaliza los node_id a 8 hex en minúscula (`!xxxxxxxx`) para que el mismo dispositivo no aparezca dos veces por formato distinto; si aun así ves dos IDs que solo cambian en los últimos caracteres (a9a0 vs a0a9), son dos nodos distintos (gateway + T-Echo).
+
+**Nota técnica:** El protocolo Meshtastic incluye HDOP/precisión en los paquetes de posición; el gateway actual no los usa para rechazar posiciones malas. Una mejora futura sería opcionalmente rechazar o advertir cuando la precisión sea peor que un umbral (p. ej. HDOP alto o precisión > 100 m).
+
 ### No se reciben mensajes
 
 **Verificar conexión serial:**
