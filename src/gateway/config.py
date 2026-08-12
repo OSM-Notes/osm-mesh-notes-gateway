@@ -48,6 +48,12 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 # Timezone
 TZ = os.getenv("TZ", "America/Bogota")
 
+# Meshtastic LoRa region for the USB gateway radio.
+# Official Meshtastic mapping: Colombia → ANZ (same preset as Australia/NZ).
+# Also used by several LATAM countries (e.g. Argentina, Chile); Brazil uses BR_902.
+# See https://meshtastic.org/docs/configuration/region-by-country/
+LORA_REGION = os.getenv("LORA_REGION", "ANZ").strip().upper()
+
 # GPS validation thresholds (seconds)
 # POS_GOOD: Position is considered "good" if less than this age
 # POS_MAX: Maximum acceptable position age (reject if older)

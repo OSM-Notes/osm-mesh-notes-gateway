@@ -12,8 +12,9 @@ Esta guía describe los elementos necesarios y pasos para desplegar el gateway e
 - [ ] **Tarjeta microSD** con **Raspberry Pi OS (Raspbian) ya instalado** (mínimo 16GB, clase 10 o superior)
   - ⚠️ **IMPORTANTE**: La SD debe estar flasheada con Raspbian **antes de salir a terreno**
   - El gateway debe estar instalado y configurado en la SD
-- [ ] **Fuente de alimentación** para Raspberry Pi (5V, mínimo 2.5A)
-- [ ] **Dispositivo Meshtastic** (Heltec V3 u otro compatible)
+- [ ] **Fuente de alimentación** para Raspberry Pi (5V, mínimo 2.5A) — preferible vía power bank (ver abajo)
+- [ ] **Dispositivo Meshtastic** (Heltec V3 u otro compatible) con región LoRa **ANZ** (Colombia; ver spec)
+- [ ] **T-Echo / nodos de campo** configurados con la **misma región ANZ** y el mismo canal que el gateway
 - [ ] **Cable USB** para conectar Meshtastic al Raspberry Pi
 - [ ] **Antena LoRa** para el dispositivo Meshtastic
 
@@ -25,11 +26,16 @@ Esta guía describe los elementos necesarios y pasos para desplegar el gateway e
 - [ ] **Computador portátil** - Para acceso SSH cuando la red es la misma
 - [ ] **Cable de red Ethernet** (opcional) - Para conexión directa si hay router disponible
 
-### Conectividad
+### Conectividad y energía
 
 - [ ] **Teléfono del administrador** con capacidad de compartir Internet (hotspot WiFi)
 - [ ] **Cable de carga** para el teléfono (si se usa como hotspot)
-- [ ] **Batería externa** (power bank) - Para alimentar Raspberry Pi si no hay toma eléctrica
+- [ ] **Power bank (recomendado como UPS)** entre el tomacorriente y la Raspberry Pi:
+  - Conectar: **toma eléctrica → power bank (carga passthrough) → Pi**
+  - Así la Pi no ve cortes breves ni brownouts de la red; la batería absorbe el golpe
+  - Si no hay toma, el power bank alimenta solo a la Pi
+  - Capacidad orientativa: ≥ 10 000 mAh; verificar que entregue **5 V / ≥ 2.5 A** estables
+- [ ] Cargador de pared compatible con el power bank (para el lado “corriente”)
 
 ### Herramientas y Accesorios
 

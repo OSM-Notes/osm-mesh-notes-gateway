@@ -68,10 +68,14 @@ Prioridades:
 
 ## 5. Radio / canal (despliegue de referencia)
 
-- Región de referencia: **US915** (Colombia) en todos los nodos
-- Canal: **público** (sin PSK) en el despliegue de referencia del MVP
+- **Región LoRa (Meshtastic)**: **`ANZ`** por defecto.
+  - Fuente: [Meshtastic — LoRa Region by Country](https://meshtastic.org/docs/configuration/region-by-country/) → **Colombia = ANZ** (preset Australia & New Zealand, ~915–928 MHz).
+  - También listados con ANZ en esa tabla: p. ej. Argentina, Chile, Australia, Nueva Zelanda. **No todo LATAM**: Brasil usa `BR_902`; México y otros pueden diferir — consultar la tabla oficial.
+  - Constante / env: `LORA_REGION=ANZ` en `config.py` / `.env`. El gateway intenta aplicar esta región al radio USB al conectar. Los **T-Echo** deben configurarse igual en la app (`LoRa → Region → ANZ`).
+  - Otras partes del mundo: cambiar `LORA_REGION` y la app de cada nodo (p. ej. `US`, `EU_868`).
+- **Canal**: **público** (sin PSK) en el despliegue de referencia del MVP.
 
-Cualquier nodo en el mismo canal puede leer/escribir. El gateway solo actúa ante comandos.
+Cualquier nodo en el mismo canal **y la misma región** puede leer/escribir. El gateway solo actúa ante comandos.
 
 ---
 
@@ -160,7 +164,7 @@ Todas las respuestas de comandos van por **DM**.
 | `#osmnote <texto>` | Crear/encolar nota (variantes abajo) |
 | `#osmhelp` | Ayuda + tips de configuración |
 | `#osmmorehelp` | Ayuda extendida |
-| `#osmstatus` | Gateway activo, Internet OK/NO, cola total y del nodo |
+| `#osmstatus` | Gateway activo, Internet, cola total/tuyas, enviadas hoy, último envío, errores en cola |
 | `#osmcount` | Notas del nodo: hoy + total (día según `TZ`) |
 | `#osmlist [n]` | Últimas n notas pending+sent (default 5, max 20) |
 | `#osmqueue` | Cola total y del nodo |
@@ -175,7 +179,8 @@ Reglas:
 - Rate limit por nodo: `USER_RATE_LIMIT_MAX_MESSAGES` = 5 en ventana de 60 s
 - Texto libre sin comando → **ignore** (sin respuesta)
 
-Chequeo de Internet en `#osmstatus`: HTTP a `https://www.openstreetmap.org` (misma dependencia operativa que el upload).
+Chequeo de Internet en `#osmstatus`: HTTP a `https://www.openstreetmap.org` (misma dependencia operativa que el upload).  
+Respuesta enriquecida (mesh, sin SSH): cola global y del nodo, notas creadas/enviadas hoy, edad del último envío exitoso, conteo de pendientes con `last_error`, y aviso si `DRY_RUN=true`.
 
 ---
 

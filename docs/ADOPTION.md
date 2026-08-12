@@ -13,21 +13,42 @@ Complementa:
 
 ## 1. Artefacto “listo para campo”
 
-**Estado hoy:** instalación con `scripts/install_pi.sh` + guía de terreno.  
-**Objetivo de adopción:** una Pi que arranca y ya escucha `#osmnote`.
+**Estado hoy (operador técnico):** instalar Raspberry Pi OS → `git clone` / checkout → `sudo bash scripts/install_pi.sh` → configurar `.env`. Ese flujo **es válido** y es el recomendado si quien despliega sabe Linux.
+
+**Estado deseado (adopción no técnica):** un archivo de disco listo para flashear, sin GitHub en campo.
+
+### ¿Dónde se “montaría” esa imagen? ¿Es un ISO?
+
+No es un ISO de CD. Es una **imagen completa de la microSD** del Raspberry Pi:
+
+| Qué | Detalle |
+|-----|---------|
+| Formato | Archivo `.img` o `.img.xz` (disco entero, no un CD) |
+| Dónde se publica | **GitHub Releases** del proyecto (junto al tag `vX.Y.Z`), con SHA256 |
+| Cómo se usa | En un PC: [Raspberry Pi Imager](https://www.raspberrypi.com/software/) o balenaEtcher → elegir el `.img.xz` → flashear una microSD vacía → insertar en la Pi → encender |
+| Qué trae | Raspberry Pi OS + gateway ya instalado + servicio enabled (y `.env` de ejemplo o first-boot) |
+
+**Scripts del repo** (detalle en [SD_IMAGE_RELEASE.md](SD_IMAGE_RELEASE.md)):
+
+```bash
+# En la Pi, tras git clone / checkout del tag:
+sudo bash scripts/prepare_golden_pi.sh --tag v0.2.0 --with-backup-timer
+
+# En un PC Linux, con la microSD insertada:
+sudo bash scripts/build_sd_image.sh --device /dev/sdX --version v0.2.0 --upload
+```
+
+Hasta tener el `.img.xz` en Releases, el equivalente operativo es: preparar la SD **en casa** con git+install, probarla, y llevar esa SD al terreno.
 
 ### Procedimiento mínimo de preparación (antes de salir)
 
-1. Flashear Raspberry Pi OS en microSD **en casa/oficina**.
-2. Instalar el gateway (`sudo bash scripts/install_pi.sh`).
+1. Flashear Raspberry Pi OS en microSD **en casa/oficina** (o flashear la imagen del release cuando exista).
+2. Instalar el gateway (`sudo bash scripts/install_pi.sh`) si partiste de OS limpio.
 3. Configurar `/var/lib/lora-osmnotes/.env` (`SERIAL_PORT`, `TZ`, `DRY_RUN=false`).
-4. Probar con Heltec/T-Echo: `#osmstatus` y un `#osmnote` de prueba.
-5. Etiquetar la SD y la caja: versión del software, región LoRa (p. ej. US915), contacto del operador.
-6. Ejecutar `bash scripts/health_check.sh` y guardar la salida (foto o archivo).
-
-### Imagen preconfigurada (aún no publicada)
-
-Publicar una imagen `.img.xz` versionada es el salto pendiente (ver ROADMAP *Must*). Hasta entonces, este procedimiento + SD ya instalada es el equivalente operativo.
+4. Opcional: `sudo bash scripts/install_backup_timer.sh` (backups diarios).
+5. Probar con Heltec/T-Echo: `#osmstatus` y un `#osmnote` de prueba.
+6. Etiquetar la SD y la caja: versión del software, región LoRa, contacto del operador.
+7. Ejecutar `bash scripts/health_check.sh` y guardar la salida.
 
 ---
 
@@ -54,15 +75,24 @@ bash scripts/health_check.sh
 
 El script reporta: servicio systemd, puerto serial, espacio en disco, NTP, cola SQLite pendiente, última actividad en logs.
 
-Desde la mesh (sin SSH):
+Desde la mesh (sin SSH ni pantalla):
 
 ```
 #osmstatus
 ```
 
-Respuesta esperada: gateway activo, Internet OK/NO, cola total y del nodo.
+Ejemplo de respuesta:
 
-**Regla operativa:** un coordinador debe poder decir en &lt;2 minutos si el puente está vivo.
+```
+ℹ️ Gateway activo
+Internet: ✅ OK
+Cola: 3 (tuyas: 1)
+Hoy: 12 enviadas / 15 nuevas
+Último envío: hace 4 min (#456789)
+Errores en cola: 0
+```
+
+**Regla operativa:** con solo el teléfono (Meshtastic) debe bastar para saber si el puente está sano.
 
 ---
 
@@ -113,20 +143,35 @@ El software facilita reportes de mapeo. La decisión de desplegarlo en un contex
 
 ## 6. Observabilidad mínima (sin SaaS)
 
-### Cola y errores (SQLite)
+### Quién usa qué
+
+| Rol | Acceso | Herramienta |
+|-----|--------|-------------|
+| Solo app Meshtastic (sin SSH / sin pantalla) | Mesh | `#osmstatus` **enriquecido** (Internet, cola, hoy, último envío, errores) |
+| Coordinador con SSH / teclado en la Pi | Consola | Scripts abajo (manual o timer systemd) |
+
+`#osmstatus` **no** llama a `mission_report.sh`. Son canales distintos: el status es un resumen corto por DM LoRa; el mission report es un informe largo en la Pi (tablas + logs) para archivar o donantes.
+
+### Informe de misión (manual)
 
 ```bash
-DB=/var/lib/lora-osmnotes/gateway.db
-
-# Pendientes
-sudo sqlite3 "$DB" "SELECT local_queue_id, node_id, status, substr(text_original,1,40), last_error FROM notes WHERE status='pending' ORDER BY created_at;"
-
-# Últimas 20 notas
-sudo sqlite3 "$DB" "SELECT local_queue_id, status, osm_note_id, created_at FROM notes ORDER BY id DESC LIMIT 20;"
-
-# Conteo del día (UTC en DB; interpretar con TZ del servidor)
-sudo sqlite3 "$DB" "SELECT status, COUNT(*) FROM notes GROUP BY status;"
+bash scripts/mission_report.sh
+bash scripts/mission_report.sh --out /var/lib/lora-osmnotes/reports/mission-$(date +%Y%m%d).txt
 ```
+
+Resumen: totales, pendientes, enviadas, errores, últimas notas, pistas de log.
+
+### Export CSV / JSON (manual)
+
+```bash
+bash scripts/export_notes.sh
+# → /var/lib/lora-osmnotes/exports/notes-YYYYMMDD-HHMMSS.csv
+
+bash scripts/export_notes.sh --format json --out /tmp/notes.json
+bash scripts/export_notes.sh --status pending
+```
+
+**Privacidad:** revisar `text_original` antes de compartir con terceros.
 
 ### Logs
 
@@ -135,38 +180,70 @@ sudo journalctl -u lora-osmnotes -n 100 --no-pager
 sudo journalctl -u lora-osmnotes --since today | grep -iE 'error|sent|Created note'
 ```
 
-### Export simple para post-misión
-
-```bash
-sudo sqlite3 "$DB" -header -csv "SELECT * FROM notes;" > notes_export_$(date +%Y%m%d).csv
-```
-
-No enviar este CSV a terceros sin revisar PII en `text_original`.
-
 ---
 
 ## 7. Resiliencia de despliegue
 
-| Riesgo | Mitigación operativa |
-|--------|----------------------|
-| Corte de luz | Power bank ≥ 10 000 mAh; apagado limpio si es posible |
-| SD corrupta | SD clase 10+; imagen de respaldo flasheada en segunda SD |
-| Servicio caído | `systemd` ya usa `Restart=always`; verificar con `health_check.sh` |
-| Sin Internet | Esperado: cola local; no reiniciar en pánico |
-| Reloj incorrecto | Ver [TIME_CONFIGURATION.md](TIME_CONFIGURATION.md) |
-| Pérdida de datos | Copiar `gateway.db` a USB al final del día |
+### Modelo mental
 
-### Backup rápido
+| Escenario | Qué importa |
+|-----------|-------------|
+| Hay Internet | La nota sube a OSM; OSM es la copia “buena”. Perder la SD duele poco para lo **ya enviado**. |
+| Sin Internet / cola `pending` | La DB local es crítica. Si se corrompe la SD, se pierden reportes no subidos. |
+| Apagón | Al volver la energía, systemd reinicia el gateway; los `pending` deberían reintentarse. UPS/power bank reduce apagones bruscos. |
+| SD parcialmente corrupta | Un **backup periódico de la DB** en carpeta conocida (o USB) mitiga la pérdida de la cola. |
 
-```bash
-sudo systemctl stop lora-osmnotes
-sudo cp /var/lib/lora-osmnotes/gateway.db /media/usb/gateway-$(date +%Y%m%d).db
-sudo systemctl start lora-osmnotes
+### Dónde están los backups (fácil de encontrar)
+
+Ruta canónica en la Pi:
+
+```
+/var/lib/lora-osmnotes/
+  gateway.db          # base en vivo
+  backups/            # snapshots gateway-YYYYMMDD-HHMMSS.db
+  exports/            # CSV/JSON de misión
+  reports/            # informes de texto
+  README-BACKUP.txt   # nota para quien abre el disco en otra máquina
 ```
 
-### Watchdog
+### Backup manual
 
-El unit systemd reinicia el proceso si muere. Para watchdog de hardware (Pi), ver configuración opcional en ROADMAP; no es obligatoria para el MVP.
+```bash
+bash scripts/backup_db.sh
+# → /var/lib/lora-osmnotes/backups/gateway-….db
+
+# Copia extra a USB montada (recomendado si hay cola offline larga)
+bash scripts/backup_db.sh --usb /media/pi/NOMBRE_USB
+```
+
+### Backup diario automático
+
+```bash
+sudo bash scripts/install_backup_timer.sh
+# Habilita systemd timer diario → misma carpeta backups/
+sudo systemctl start lora-osmnotes-backup.service   # prueba inmediata
+```
+
+### Extraer el backup desde otra máquina
+
+1. Apagar la Pi, sacar la microSD (o el USB de backups).
+2. Montarla en un PC; abrir `/var/lib/lora-osmnotes/backups/` (o `…/lora-osmnotes-backups/` en el USB).
+3. Copiar el `.db` más reciente.
+4. En una Pi de reemplazo: detener servicio, poner el archivo como `gateway.db`, arrancar servicio.
+
+### Energía
+
+- **Recomendado:** power bank como UPS — toma → power bank → Pi (passthrough). Ver [FIELD_DEPLOYMENT_GUIDE.md](FIELD_DEPLOYMENT_GUIDE.md).
+- Reduce apagones bruscos y corrupción de SD.
+- No sustituye el backup si operas muchos días offline.
+
+### Otros
+
+| Riesgo | Mitigación |
+|--------|------------|
+| Servicio caído | `Restart=always` + `health_check.sh` |
+| Reloj incorrecto | [TIME_CONFIGURATION.md](TIME_CONFIGURATION.md) |
+| Segunda SD | Llevar una SD ya instalada de repuesto |
 
 ---
 
@@ -174,7 +251,7 @@ El unit systemd reinicia el proceso si muere. Para watchdog de hardware (Pi), ve
 
 ### Despliegue de referencia (MVP)
 
-- Región: la de tu país (doc de referencia del proyecto: US915 / Colombia)
+- Región: **ANZ** (Colombia y varios países LATAM según tabla Meshtastic; no confundir con US). Override: `LORA_REGION` en `.env`.
 - Canal público sin PSK: máxima interoperabilidad, **cero confidencialidad**
 
 ### Operación sensible (recomendado valorar)

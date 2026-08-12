@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily backup of OSM Mesh Notes gateway database
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

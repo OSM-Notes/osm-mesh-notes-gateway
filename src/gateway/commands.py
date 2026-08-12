@@ -114,7 +114,7 @@ def MSG_HELP(locale: Optional[str] = None):
         + _("Mensajes → menú (3 puntos) → Quick Chat → #osmnote\n", locale)
         + _("Desactiva 'Instantly send' para que quede 'Append to message'.\n\n", locale)
         + _("📱 Configuración recomendada para dispositivos móviles:\n", locale)
-        + _("Position Broadcast: 60s | Smart Broadcast: 15s/100m | GPS Update: 120s\n", locale)
+        + _("Region: ANZ (Colombia/LATAM) | Position Broadcast: 60s | Smart Broadcast: 15s/100m | GPS Update: 120s\n", locale)
         + _("Role: CLIENT (para reenviar mensajes #osmXXX)\n\n", locale)
         + _("⚠️ No envíes datos personales ni emergencias de cualquier tipo.", locale)
     )
@@ -344,8 +344,12 @@ class CommandProcessor:
         return "ignore", None
 
     def _handle_status(self, node_id: str, locale: Optional[str] = None) -> Tuple[str, str]:
-        """Handle #osmstatus command."""
+        """Handle #osmstatus command (rich mesh-facing operational snapshot)."""
         import requests
+        import time as time_mod
+        import pytz
+        from .config import DRY_RUN
+
         internet_ok = False
         try:
             # Prefer OSM itself as connectivity check (same dependency as note upload)
@@ -354,16 +358,57 @@ class CommandProcessor:
         except requests.RequestException:
             pass
 
-        total_queue = self.db.get_total_queue_size()
+        gw = self.db.get_gateway_status_stats()
         node_stats = self.db.get_node_stats(node_id)
         node_queue = node_stats["queue"]
 
+        # Relative age of last successful send
+        last_sent_line = _("Último envío: nunca", locale)
+        last_sent_at = gw.get("last_sent_at")
+        if last_sent_at:
+            try:
+                sent_str = str(last_sent_at)
+                if "Z" in sent_str or "+" in sent_str:
+                    sent_dt = datetime.fromisoformat(sent_str.replace("Z", "+00:00"))
+                else:
+                    sent_dt = datetime.fromisoformat(sent_str)
+                    if sent_dt.tzinfo is None:
+                        sent_dt = pytz.UTC.localize(sent_dt)
+                age_s = max(0, int(time_mod.time() - sent_dt.timestamp()))
+                if age_s < 60:
+                    age_txt = _("{n}s", locale).format(n=age_s)
+                elif age_s < 3600:
+                    age_txt = _("{n} min", locale).format(n=age_s // 60)
+                elif age_s < 86400:
+                    age_txt = _("{n} h", locale).format(n=age_s // 3600)
+                else:
+                    age_txt = _("{n} d", locale).format(n=age_s // 86400)
+                note_id = gw.get("last_osm_note_id")
+                if note_id:
+                    last_sent_line = _("Último envío: hace {age} (#{id})", locale).format(
+                        age=age_txt, id=note_id
+                    )
+                else:
+                    last_sent_line = _("Último envío: hace {age}", locale).format(age=age_txt)
+            except (ValueError, TypeError, OSError):
+                last_sent_line = _("Último envío: desconocido", locale)
+
         status_msg = (
             _("ℹ️ Gateway activo\n", locale)
-            + _("Internet: {status}\n", locale).format(status="✅ OK" if internet_ok else "❌ NO")
-            + _("Cola total: {total}\n", locale).format(total=total_queue)
-            + _("Tu cola: {queue}", locale).format(queue=node_queue)
+            + _("Internet: {status}\n", locale).format(
+                status="✅ OK" if internet_ok else "❌ NO"
+            )
+            + _("Cola: {total} (tuyas: {mine})\n", locale).format(
+                total=gw["pending"], mine=node_queue
+            )
+            + _("Hoy: {sent} enviadas / {created} nuevas\n", locale).format(
+                sent=gw["sent_today"], created=gw["created_today"]
+            )
+            + f"{last_sent_line}\n"
+            + _("Errores en cola: {n}", locale).format(n=gw["pending_errors"])
         )
+        if DRY_RUN:
+            status_msg += "\n" + _("⚠️ DRY_RUN (no sube a OSM)", locale)
         return "osmstatus", status_msg
 
     def _handle_count(self, node_id: str, locale: str) -> Tuple[str, str]:

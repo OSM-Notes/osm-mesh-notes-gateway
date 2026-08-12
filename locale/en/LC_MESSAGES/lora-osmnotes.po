@@ -237,6 +237,42 @@ msgstr "ℹ️ Gateway active\n"
 msgid "Internet: {status}\n"
 msgstr "Internet: {status}\n"
 
+msgid "Cola: {total} (tuyas: {mine})\n"
+msgstr "Queue: {total} (yours: {mine})\n"
+
+msgid "Hoy: {sent} enviadas / {created} nuevas\n"
+msgstr "Today: {sent} sent / {created} new\n"
+
+msgid "Último envío: nunca"
+msgstr "Last send: never"
+
+msgid "Último envío: desconocido"
+msgstr "Last send: unknown"
+
+msgid "Último envío: hace {age} (#{id})"
+msgstr "Last send: {age} ago (#{id})"
+
+msgid "Último envío: hace {age}"
+msgstr "Last send: {age} ago"
+
+msgid "{n}s"
+msgstr "{n}s"
+
+msgid "{n} min"
+msgstr "{n} min"
+
+msgid "{n} h"
+msgstr "{n} h"
+
+msgid "{n} d"
+msgstr "{n} d"
+
+msgid "Errores en cola: {n}"
+msgstr "Queue errors: {n}"
+
+msgid "⚠️ DRY_RUN (no sube a OSM)"
+msgstr "⚠️ DRY_RUN (not uploading to OSM)"
+
 msgid "Cola total: {total}\n"
 msgstr "Total queue: {total}\n"
 

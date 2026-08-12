@@ -9,7 +9,7 @@
 ### Crear un reporte
 
 1. Enciende el T-Echo **al aire libre** y espera **30–60 segundos** (GPS).
-2. Abre la app Meshtastic (Bluetooth).
+2. App Meshtastic: región LoRa = **ANZ** (Colombia), mismo canal que el gateway.
 3. Envía:
 
 ```
@@ -34,7 +34,7 @@ Ejemplo: `#osmnote Puente agrietado, solo peatones.`
 | Comando | Para qué |
 |---------|----------|
 | `#osmhelp` | Ayuda |
-| `#osmstatus` | ¿El gateway está vivo? ¿Hay Internet? |
+| `#osmstatus` | Estado del gateway (Internet, cola, enviadas hoy, último envío) |
 | `#osmlist` | Tus últimas notas |
 | `#osmlang es` / `#osmlang en` | Idioma |
 
@@ -55,7 +55,7 @@ Las notas en OpenStreetMap son **públicas**. El canal de radio puede ser escuch
 ### Send a report
 
 1. Power on the T-Echo **outdoors** and wait **30–60 seconds** (GPS).
-2. Open the Meshtastic app (Bluetooth).
+2. Meshtastic app: LoRa region **ANZ** (Colombia default), same channel as the gateway.
 3. Send:
 
 ```

@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup OSM Mesh Notes gateway SQLite database
+Documentation=file:///var/lib/lora-osmnotes/README-BACKUP.txt
+
+[Service]
+Type=oneshot
+Environment=DATA_DIR=/var/lib/lora-osmnotes
+Environment=BACKUP_DIR=/var/lib/lora-osmnotes/backups
+# Installed by scripts/install_backup_timer.sh (or copy backup_db.sh here manually)
+ExecStart=/var/lib/lora-osmnotes/scripts/backup_db.sh
+Nice=10

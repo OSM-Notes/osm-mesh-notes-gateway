@@ -161,6 +161,25 @@ def test_osmstatus(processor):
     cmd_type, response = processor.process_message("test_node", "#osmstatus")
     assert cmd_type == "osmstatus"
     assert "Gateway activo" in response
+    assert "Internet:" in response
+    assert "Cola:" in response
+    assert "Hoy:" in response
+    assert "Último envío:" in response
+    assert "Errores en cola:" in response
+
+
+def test_osmstatus_with_sent_note(processor, db):
+    """Rich status includes last send info after a note is marked sent."""
+    from datetime import datetime
+
+    node_id = "test_node"
+    qid = db.create_note(node_id, 1.0, 2.0, "hello", "hello")
+    db.update_note_sent(qid, 4242, "https://www.openstreetmap.org/note/4242")
+
+    cmd_type, response = processor.process_message(node_id, "#osmstatus")
+    assert cmd_type == "osmstatus"
+    assert "Hoy:" in response
+    assert "#4242" in response or "enviadas" in response
 
 
 def test_osmcount(processor, db):

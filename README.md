@@ -231,7 +231,7 @@ Los usuarios pueden enviar comandos desde la app Meshtastic:
 | `#osmnote <mensaje>` | Crea una nota de OSM. Requiere GPS reciente (≤**120s**) |
 | `#osmhelp` | Muestra instrucciones de uso básicas |
 | `#osmmorehelp` | Muestra ayuda adicional detallada |
-| `#osmstatus` | Estado del gateway (activo, Internet, colas) |
+| `#osmstatus` | Estado del gateway (activo, Internet, colas, enviadas hoy, último envío) |
 | `#osmcount` | Conteo de notas creadas (hoy + total) |
 | `#osmlist [n]` | Lista últimas `n` notas (default: 5, max: 20) |
 | `#osmqueue` | Tamaño de cola total y del nodo |

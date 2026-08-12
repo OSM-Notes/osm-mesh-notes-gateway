@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Adoption pack**: `docs/ADOPTION.md`, `docs/ROADMAP.md`, `docs/FIELD_CARD.md`, and `scripts/health_check.sh` for humanitarian field operations.
+- **Adoption pack**: `docs/ADOPTION.md`, `docs/ROADMAP.md`, `docs/FIELD_CARD.md`, and operational scripts (`health_check`, `mission_report`, `export_notes`, `backup_db`, daily backup timer).
+- **Default LoRa region ANZ**: Colombia (and several LATAM countries per Meshtastic official table); configurable via `LORA_REGION`. Replaces incorrect US915 docs.
+- **SD image tooling**: `scripts/prepare_golden_pi.sh`, `scripts/build_sd_image.sh`, and `docs/SD_IMAGE_RELEASE.md` (optional GitHub Release `.img.xz` upload).
+- **Rich `#osmstatus`**: queue, today's sent/created counts, last send age, pending errors, DRY_RUN hint — usable from Meshtastic without SSH.
 - **Canonical specification**: Rewrote `docs/spec.md` to document implemented behavior (GPS 120s, all commands, Meshtastic protobuf, store-and-forward rules). Added `docs/README.md` documentation index.
 - **New Command**: `#osmnodes` command to list all known nodes in the mesh network, showing node ID, GPS coordinates, time since last seen, and number of times seen. Useful for validating mesh connectivity and device presence.
 - **Project Attribution**: OSM notes now include attribution text ("Created via OSM Mesh Notes Gateway") at the end, translated to the user's current language preference.

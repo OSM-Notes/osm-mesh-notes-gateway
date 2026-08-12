@@ -13,7 +13,7 @@ except ImportError:
     MESHTASTIC_AVAILABLE = False
     pub = None
 
-from .config import SERIAL_PORT
+from .config import SERIAL_PORT, LORA_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,9 @@ class MeshtasticSerial:
             # Configure gateway device role to CLIENT_MUTE
             self._configure_gateway_role()
 
+            # Default LoRa region (ANZ for Colombia / several LATAM deployments)
+            self._configure_lora_region()
+
             # Check if device is T-Echo and configure GPS broadcast if needed
             self._configure_techo_gps()
 
@@ -163,6 +166,55 @@ class MeshtasticSerial:
                 logger.debug(f"Gateway device role already set to CLIENT_MUTE ({current_role})")
         except Exception as e:
             logger.warning(f"Failed to configure gateway device role: {e}")
+
+    def _configure_lora_region(self):
+        """Set LoRa region on the gateway radio from LORA_REGION (default ANZ).
+
+        Colombia and several LATAM countries use the ANZ preset per Meshtastic
+        official region-by-country table. Field nodes (T-Echo) must use the same
+        region or they will not hear the gateway.
+        """
+        try:
+            local_node = self.interface.getNode("^local")
+            if not hasattr(local_node, "localConfig") or not hasattr(local_node.localConfig, "lora"):
+                logger.warning("Could not access LoRa config, skipping region configuration")
+                return
+
+            region_name = LORA_REGION or "ANZ"
+            target = None
+
+            # Resolve enum from meshtastic protobufs
+            try:
+                from meshtastic.protobuf import config_pb2
+                RegionCode = config_pb2.Config.LoRaConfig.RegionCode
+                target = getattr(RegionCode, region_name, None)
+            except (ImportError, AttributeError):
+                try:
+                    import meshtastic.config_pb2 as config_pb2
+                    RegionCode = config_pb2.Config.LoRaConfig.RegionCode
+                    target = getattr(RegionCode, region_name, None)
+                except (ImportError, AttributeError):
+                    target = None
+
+            if target is None:
+                # Common numeric fallbacks (Meshtastic RegionCode)
+                fallback = {"US": 1, "EU_868": 3, "ANZ": 5, "BR_902": 22}
+                target = fallback.get(region_name)
+                if target is None:
+                    logger.warning(f"Unknown LORA_REGION={region_name!r}; leave device region unchanged")
+                    return
+
+            current = local_node.localConfig.lora.region
+            if current == target:
+                logger.debug(f"Gateway LoRa region already {region_name} ({current})")
+                return
+
+            logger.info(f"Configuring gateway LoRa region to {region_name} (was {current})")
+            local_node.localConfig.lora.region = target
+            local_node.writeConfig("lora")
+            logger.info(f"Configured gateway LoRa region to {region_name}")
+        except Exception as e:
+            logger.warning(f"Failed to configure gateway LoRa region: {e}")
 
     def _configure_techo_gps(self):
         """Configure GPS broadcast interval for T-Echo devices."""

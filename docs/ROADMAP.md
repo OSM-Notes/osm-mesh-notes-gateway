@@ -21,23 +21,27 @@ Leyenda:
 | Modo entrenamiento documentado (`DRY_RUN`) | Hecho (código ya existía) | ADOPTION §4 |
 | Ética / do-no-harm operativa | Hecho (documento) | ADOPTION §5 |
 | Checklist de release versionado | Hecho (proceso) | ver § Release abajo |
-| Imagen microSD preconfigurada + checksum | Pendiente | Mayor salto de adopción hardware |
+| Informe de misión + export CSV/JSON | Hecho | `scripts/mission_report.sh`, `scripts/export_notes.sh` |
+| Backup DB + timer diario opcional | Hecho | `scripts/backup_db.sh`, `install_backup_timer.sh`, `systemd/lora-osmnotes-backup.*` |
+| Imagen microSD preconfigurada + checksum | Scripts listos; artefacto pendiente | `prepare_golden_pi.sh` + `build_sd_image.sh` + [SD_IMAGE_RELEASE.md](SD_IMAGE_RELEASE.md) |
 | Guía PSK / canal dedicado por operación | Hecho (operativa) | ADOPTION §8 |
 
 ---
 
 ## Should (mismo repo)
 
-| Ítem | Valor humanitario |
-|------|-------------------|
-| Plantillas de reporte (`#osmnote derrumbe`, etc.) | Menos errores de tipeo, notas más útiles |
-| Usar HDOP / precisión GPS en validación | Menos notas con cold-start malo |
-| Estado `failed` + comando de reintento / visibilidad | Recuperar cola sin SSH |
-| Dashboard HTML local read-only en la Pi | Coordinación en puesto base |
-| OAuth OSM opcional (notas atribuibles a org) | Trazabilidad institucional |
-| Export / métricas del día en un solo comando | Informes a orgs/donantes sin PII |
-| Watchdog documentado / opcional de hardware | Despliegues solares largos |
-| Más idiomas (`.po` + FIELD_CARD) | Operaciones fuera de es/en |
+| Ítem | Valor humanitario | Estado |
+|------|-------------------|--------|
+| Plantillas de reporte (`#osmnote derrumbe`, etc.) | Menos errores de tipeo | Pendiente |
+| Usar HDOP / precisión GPS en validación | Menos notas con cold-start malo | Pendiente |
+| Estado `failed` + reintento / visibilidad | Recuperar cola sin SSH | Pendiente |
+| Dashboard HTML local read-only | Coordinación en puesto base | Pendiente |
+| OAuth OSM opcional | Notas atribuibles a org | Pendiente |
+| Export / informe de misión | Informes post-día | Hecho (`mission_report` / `export_notes`) |
+| Backup DB + timer | Mitigar corrupción SD de la cola | Hecho |
+| Enriquecer `#osmstatus` | Coordinación solo por mesh (sin SSH) | Hecho |
+| Más idiomas (`.po` + FIELD_CARD) | Operaciones fuera de es/en | Pendiente |
+| Watchdog HW documentado | Despliegues solares largos | Pendiente menor |
 
 ---
 

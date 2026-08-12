@@ -352,6 +352,52 @@ class Database:
             cursor = conn.execute("SELECT COUNT(*) as count FROM notes WHERE status = 'pending'")
             return cursor.fetchone()["count"]
 
+    def get_gateway_status_stats(self) -> Dict[str, Any]:
+        """
+        Aggregate stats for a rich #osmstatus reply.
+
+        Returns:
+            pending, sent, created_today, sent_today, pending_errors,
+            last_sent_at (str|None), last_osm_note_id (int|None)
+        """
+        with self._get_connection() as conn:
+            pending = conn.execute(
+                "SELECT COUNT(*) AS c FROM notes WHERE status = 'pending'"
+            ).fetchone()["c"]
+            sent = conn.execute(
+                "SELECT COUNT(*) AS c FROM notes WHERE status = 'sent'"
+            ).fetchone()["c"]
+            created_today = conn.execute(
+                "SELECT COUNT(*) AS c FROM notes WHERE date(created_at) = date('now')"
+            ).fetchone()["c"]
+            sent_today = conn.execute(
+                "SELECT COUNT(*) AS c FROM notes WHERE status = 'sent' AND date(sent_at) = date('now')"
+            ).fetchone()["c"]
+            pending_errors = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM notes
+                WHERE status = 'pending'
+                  AND last_error IS NOT NULL
+                  AND last_error != ''
+                """
+            ).fetchone()["c"]
+            last = conn.execute(
+                """
+                SELECT sent_at, osm_note_id FROM notes
+                WHERE status = 'sent' AND sent_at IS NOT NULL
+                ORDER BY sent_at DESC LIMIT 1
+                """
+            ).fetchone()
+            return {
+                "pending": pending,
+                "sent": sent,
+                "created_today": created_today,
+                "sent_today": sent_today,
+                "pending_errors": pending_errors,
+                "last_sent_at": last["sent_at"] if last else None,
+                "last_osm_note_id": last["osm_note_id"] if last else None,
+            }
+
     def check_duplicate(
         self,
         node_id: str,

@@ -45,3 +45,9 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Release disk images (publish via GitHub Releases, not git)
+dist/
+*.img
+*.img.xz
+*.img.xz.sha256
